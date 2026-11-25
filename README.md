@@ -79,23 +79,23 @@ apt-get install -y goaccess geoip-database
 
 ### Step 4: Get the Files onto Your Server
 
-Fetch the files into `/home/keyhelp/www/keyhelp/dashboard-layout` (adjust the repository URL if your remote uses a different slug):
+Clone or pull `https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language` into `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess`:
 
-If `/home/keyhelp/www/keyhelp/dashboard-layout` does not exist yet:
-
-~~~bash
-mkdir -p /home/keyhelp/www/keyhelp
-git clone https://github.com/NicoMSH-plugins/keyhelp-dashboard-layout-customizer.git /home/keyhelp/www/keyhelp/dashboard-layout
-~~~
-
-If `/home/keyhelp/www/keyhelp/dashboard-layout` already exists, pull or check out into it:
+If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` does not exist yet:
 
 ~~~bash
-cd /home/keyhelp/www/keyhelp/dashboard-layout
-git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/keyhelp-dashboard-layout-customizer.git && git fetch origin && git checkout -t origin/main)
+mkdir -p /home/keyhelp/www/keyhelp/dashboard-layout
+git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ~~~
 
-Verify that the `goaccess/` folder and its files are present:
+If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` already exists, pull or check out into it:
+
+~~~bash
+cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
+git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git && git fetch origin && git checkout -t origin/main)
+~~~
+
+Verify that the files are present:
 
 ~~~bash
 ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
@@ -186,7 +186,7 @@ To keep your statistics up to date automatically, add a root cronjob (e.g. every
 Pull the latest changes as `keyhelp` and re-run `install.sh` as `root` to update `/usr/local/bin/` scripts, `gen-lang.php`, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
 
 ~~~bash
-su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout pull"
+su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess pull"
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install.sh
 ~~~
 
