@@ -15,7 +15,11 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 
 ## Features
 
-- Automatically discovers all active domains with access logs under `/home/users/<KH_USER>/logs/` and generates individual HTML reports (`<domain>.html`).
+- Automatically discovers all active domains with access logs under `/home/users/<KH_USER>/logs/` (or a custom `LOG_BASE`) and generates individual HTML reports (`<domain>.html`).
+- Uses persistent GoAccess databases under `/var/lib/goaccess-db/<KH_USER>/<domain>/` with a 3-stage workflow:
+  1. **Initial import:** Reads all available logs including compressed `.gz` archives (decompressed on the fly) with progress output on TTY.
+  2. **Incremental run:** Appends only the current uncompressed log file once a database already exists.
+  3. **Language-only render (`DB_ONLY=1`):** Re-renders HTML reports directly from the existing database when switching languages.
 - Injects a fixed, searchable domain navigation sidebar (`Domains (A–Z)`) and a live language selector (`#custom-lang-select`) into every generated report.
 - Supports 12 languages (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`) via UTF-8 system locales and stores the active language in `/var/lib/goaccess-db/.current_lang` so scheduled cron runs keep your selected language.
 - Asynchronous report regeneration via `/var/lib/goaccess-db/.lang_request` and `goaccess-lang.path` with `flock` locking and a progress overlay in the browser.
@@ -26,12 +30,12 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 
 ## File Structure
 
-~~~text
+```text
 dashboard-layout/goaccess/
 ├── README.md                    # Full installation and usage documentation
 ├── .gitignore                   # Ignores local *.conf files while keeping *.conf.example
 ├── goaccess.conf.example        # Template for per-user configuration (<user>.conf)
-├── install.sh                   # Interactive installer (locales, dirs, scripts, systemd)
+├── install.sh                   # Interactive installer (locales, dirs, scripts, .htaccess, systemd)
 ├── uninstall.sh                 # Removes systemd units and /usr/local/bin/ scripts
 ├── update-goaccess.sh           # Generates HTML reports across *.conf files and injects UI
 ├── goaccess-lang-runner.sh      # Systemd runner with flock locking and trigger cleanup
@@ -40,7 +44,7 @@ dashboard-layout/goaccess/
 ├── gen-lang.php                 # Session, same-origin & CSRF-protected trigger endpoint
 └── assets/
     └── dashboard-inject.js      # Client-side language dropdown, progress overlay & CSRF logic
-~~~
+```
 
 ***
 
@@ -50,16 +54,16 @@ dashboard-layout/goaccess/
 
 Connect to your server via SSH as `root` and check whether `goaccess` is already installed:
 
-~~~bash
+```bash
 command -v goaccess && goaccess --version
-~~~
+```
 
 If GoAccess is not installed yet, install it (along with the optional GeoIP database for country/city lookups):
 
-~~~bash
+```bash
 apt-get update
 apt-get install -y goaccess geoip-database
-~~~
+```
 
 ### Step 2: Create a Statistics Subdomain in KeyHelp
 
@@ -83,64 +87,66 @@ Clone or pull `https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Languag
 
 If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` does not exist yet:
 
-~~~bash
+```bash
 mkdir -p /home/keyhelp/www/keyhelp/dashboard-layout
 git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-~~~
+```
 
 If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` already exists, pull or check out into it:
 
-~~~bash
+```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git && git fetch origin && git checkout -t origin/main)
-~~~
+```
 
 Verify that the files are present:
 
-~~~bash
+```bash
 ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-~~~
+```
 
 ### Step 5: Set Ownership and Permissions
 
 Set ownership to `keyhelp:keyhelp` and make the shell scripts executable:
 
-~~~bash
+```bash
 chown -R keyhelp:keyhelp /home/keyhelp/www/keyhelp/dashboard-layout
 chmod 755 /home/keyhelp/www/keyhelp/dashboard-layout /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 chmod +x /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/install.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/uninstall.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh
-~~~
+```
 
 ### Step 6: Run the Installer
 
 Run `install.sh` as `root`. If no `*.conf` file exists yet, it prompts for your KeyHelp username and statistics domain and creates `<user>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`:
 
-~~~bash
+```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./install.sh
-~~~
+```
 
 The installer automatically:
 - Enables and generates the required UTF-8 locales in `/etc/locale.gen`.
 - Creates `/var/lib/goaccess-db/<user>` with permissions for `<user>:www-data`.
 - Installs `update-goaccess.sh` and `goaccess-lang-runner.sh` to `/usr/local/bin/`.
 - Copies `gen-lang.php` into your statistics subdomain webroot (`OUT_DIR`).
+- Prompts for a login username and password to create `.htaccess` and `.htpasswd` in `OUT_DIR` (`<user>:<user>`, `644` / `640`).
 - Installs and enables `goaccess-lang.path` and `goaccess-lang.service`.
 
 ### Step 7: Adjust Configuration & Add Additional Users (Optional)
 
 Edit your generated `<user>.conf` in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/` to exclude domains (such as `mail.example.com` or `stats.example.com` itself) or change the default language:
 
-~~~bash
+```bash
 nano /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/*.conf
-~~~
+```
 
 Available options in `<user>.conf`:
 - `KH_USER` – KeyHelp username whose logs should be parsed.
 - `STATS_DOMAIN` – Subdomain serving the HTML reports.
+- `LOG_BASE` – Base directory for domain logs (defaults to `/home/users/${KH_USER}/logs`).
 - `EXCLUDE_DOMAINS` – Space-separated list of domains to skip completely (no report generated).
 - `HIDE_NAV_DOMAINS` – Space-separated list of domains to generate reports for, but hide from the sidebar navigation.
 - `DEFAULT_LANG` – Initial fallback language (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`).
@@ -150,24 +156,24 @@ Available options in `<user>.conf`:
 
 ### Step 8: Generate Initial Reports & Set Up a Cronjob
 
-Run the generator once manually to build the initial GoAccess database and HTML files:
+Run the generator once manually to build the initial GoAccess database (importing existing logs including `.gz` archives) and HTML files:
 
-~~~bash
+```bash
 /usr/local/bin/update-goaccess.sh
 systemctl is-active goaccess-lang.path
-~~~
+```
 
 Verify that HTML files were created in your statistics webroot:
 
-~~~bash
+```bash
 ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
-~~~
+```
 
-To keep your statistics up to date automatically, add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
+To keep your statistics up to date automatically via incremental runs, add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
 
-~~~cron
+```cron
 */15 * * * * /usr/local/bin/update-goaccess.sh >/dev/null 2>&1
-~~~
+```
 
 ### Step 9: Open & Use GoAccess in the Browser
 
@@ -185,16 +191,16 @@ To keep your statistics up to date automatically, add a root cronjob (e.g. every
 
 Pull the latest changes as `keyhelp` and re-run `install.sh` as `root` to update `/usr/local/bin/` scripts, `gen-lang.php`, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
 
-~~~bash
+```bash
 su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess pull"
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install.sh
-~~~
+```
 
 ### Uninstalling
 
 To stop and remove the `systemd` units and helper scripts under `/usr/local/bin/`:
 
-~~~bash
+```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./uninstall.sh
-~~~
+```
