@@ -26,7 +26,7 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 
 ## File Structure
 
-```text
+~~~text
 dashboard-layout/goaccess/
 ├── README.md                    # Full installation and usage documentation
 ├── .gitignore                   # Ignores local *.conf files while keeping *.conf.example
@@ -40,7 +40,7 @@ dashboard-layout/goaccess/
 ├── gen-lang.php                 # Session, same-origin & CSRF-protected trigger endpoint
 └── assets/
     └── dashboard-inject.js      # Client-side language dropdown, progress overlay & CSRF logic
-```
+~~~
 
 ***
 
@@ -50,16 +50,16 @@ dashboard-layout/goaccess/
 
 Connect to your server via SSH as `root` and check whether `goaccess` is already installed:
 
-```bash
+~~~bash
 command -v goaccess && goaccess --version
-```
+~~~
 
 If GoAccess is not installed yet, install it (along with the optional GeoIP database for country/city lookups):
 
-```bash
+~~~bash
 apt-get update
 apt-get install -y goaccess geoip-database
-```
+~~~
 
 ### Step 2: Create a Statistics Subdomain in KeyHelp
 
@@ -77,27 +77,51 @@ apt-get install -y goaccess geoip-database
 3. Locate the **`open_basedir`** field and append `:/var/lib/goaccess-db` to the existing path list (e.g. `##DOCROOT##/www:##DOCROOT##/files:##DOCROOT##/tmp:/var/lib/goaccess-db`).
 4. Click **Save**.
 
-### Step 4: Place the Files & Set Permissions
+### Step 4: Get the Files onto Your Server
 
-Ensure the `goaccess/` directory is present under `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess`, owned by `keyhelp:keyhelp`, and that the shell scripts are executable:
+Fetch the files into `/home/keyhelp/www/keyhelp/dashboard-layout` (adjust the repository URL if your remote uses a different slug):
 
-```bash
+If `/home/keyhelp/www/keyhelp/dashboard-layout` does not exist yet:
+
+~~~bash
+mkdir -p /home/keyhelp/www/keyhelp
+git clone https://github.com/NicoMSH-plugins/keyhelp-dashboard-layout-customizer.git /home/keyhelp/www/keyhelp/dashboard-layout
+~~~
+
+If `/home/keyhelp/www/keyhelp/dashboard-layout` already exists, pull or check out into it:
+
+~~~bash
+cd /home/keyhelp/www/keyhelp/dashboard-layout
+git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/keyhelp-dashboard-layout-customizer.git && git fetch origin && git checkout -t origin/main)
+~~~
+
+Verify that the `goaccess/` folder and its files are present:
+
+~~~bash
+ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
+~~~
+
+### Step 5: Set Ownership and Permissions
+
+Set ownership to `keyhelp:keyhelp` and make the shell scripts executable:
+
+~~~bash
 chown -R keyhelp:keyhelp /home/keyhelp/www/keyhelp/dashboard-layout
 chmod 755 /home/keyhelp/www/keyhelp/dashboard-layout /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 chmod +x /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/install.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/uninstall.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh \
          /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh
-```
+~~~
 
-### Step 5: Run the Installer
+### Step 6: Run the Installer
 
 Run `install.sh` as `root`. If no `*.conf` file exists yet, it prompts for your KeyHelp username and statistics domain and creates `<user>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`:
 
-```bash
+~~~bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./install.sh
-```
+~~~
 
 The installer automatically:
 - Enables and generates the required UTF-8 locales in `/etc/locale.gen`.
@@ -106,13 +130,13 @@ The installer automatically:
 - Copies `gen-lang.php` into your statistics subdomain webroot (`OUT_DIR`).
 - Installs and enables `goaccess-lang.path` and `goaccess-lang.service`.
 
-### Step 6: Adjust Configuration & Add Additional Users (Optional)
+### Step 7: Adjust Configuration & Add Additional Users (Optional)
 
 Edit your generated `<user>.conf` in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/` to exclude domains (such as `mail.example.com` or `stats.example.com` itself) or change the default language:
 
-```bash
+~~~bash
 nano /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/*.conf
-```
+~~~
 
 Available options in `<user>.conf`:
 - `KH_USER` – KeyHelp username whose logs should be parsed.
@@ -124,28 +148,28 @@ Available options in `<user>.conf`:
 > [!NOTE]
 > **Supporting Multiple KeyHelp Users:** Copy `goaccess.conf.example` to `<seconduser>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`, adjust `KH_USER` and `STATS_DOMAIN`, and re-run `./install.sh` so directories and `gen-lang.php` are provisioned for that user as well.
 
-### Step 7: Generate Initial Reports & Set Up a Cronjob
+### Step 8: Generate Initial Reports & Set Up a Cronjob
 
 Run the generator once manually to build the initial GoAccess database and HTML files:
 
-```bash
+~~~bash
 /usr/local/bin/update-goaccess.sh
 systemctl is-active goaccess-lang.path
-```
+~~~
 
 Verify that HTML files were created in your statistics webroot:
 
-```bash
+~~~bash
 ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
-```
+~~~
 
 To keep your statistics up to date automatically, add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
 
-```cron
+~~~cron
 */15 * * * * /usr/local/bin/update-goaccess.sh >/dev/null 2>&1
-```
+~~~
 
-### Step 8: Open & Use GoAccess in the Browser
+### Step 9: Open & Use GoAccess in the Browser
 
 1. Make sure you have an active session in your **KeyHelp** panel (so your browser holds a valid KeyHelp session cookie for CSRF-protected language switching).
 2. Open your statistics subdomain in the browser by navigating directly to one of your generated domain reports:
@@ -161,16 +185,16 @@ To keep your statistics up to date automatically, add a root cronjob (e.g. every
 
 Pull the latest changes as `keyhelp` and re-run `install.sh` as `root` to update `/usr/local/bin/` scripts, `gen-lang.php`, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
 
-```bash
+~~~bash
 su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout pull"
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install.sh
-```
+~~~
 
 ### Uninstalling
 
 To stop and remove the `systemd` units and helper scripts under `/usr/local/bin/`:
 
-```bash
+~~~bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./uninstall.sh
-```
+~~~
