@@ -1,7 +1,6 @@
-cat << 'EOF' > /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/README.md
 # KeyHelp GoAccess Multi-Language Dashboard
 
-A multi-language GoAccess web analytics dashboard and live language switcher for KeyHelp domains. It generates per-domain HTML reports with a searchable domain sidebar, persists GoAccess databases across runs (`--persist` / `--restore`), protects access via a custom PHP login gate (`login.php`) backed by `.htpasswd`, provides a live Log Viewer overlay (`log-view.php`), and switches report languages on the fly via a `systemd` path/service watcher (`goaccess-lang.path` / `goaccess-lang.service`) and `gen-lang.php`.
+A multi-language GoAccess web analytics dashboard and live language switcher for KeyHelp domains. It generates per-domain HTML reports with a searchable domain sidebar, persists GoAccess databases across runs (`--persist` / `--restore`), protects access via a custom PHP login gate (`login.php`) backed by `.htpasswd`, provides a live Log Viewer overlay (`log-view.php`), checks for updates against the Git branch under the sidebar buttons, and switches report languages on the fly via a `systemd` path/service watcher (`goaccess-lang.path` / `goaccess-lang.service`) and `gen-lang.php`.
 
 > [!IMPORTANT]
 >
@@ -18,7 +17,7 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 
 - Automatically discovers all active domains with access logs under `/home/users/<KH_USER>/logs/` and generates individual HTML reports (`<domain>.html`).
 - Uses persistent GoAccess databases (`--db-path`, `--persist`, `--restore`, plus `DB_ONLY` support) so repeated cron runs do not duplicate historical data.
-- Injects a fixed, searchable domain navigation sidebar (`Domains (A–Z)`), a live language selector (`#custom-lang-select`), a **Log anzeigen / View Log** button, and an **Abmelden / Logout** link (`/login.php?logout=1`) into every generated report.
+- Injects a fixed, searchable domain navigation sidebar (`Domains (A–Z)`), a live language selector (`#custom-lang-select`), a **Log anzeigen / View Log** button, an **Abmelden / Logout** link (`/login.php?logout=1`), and a Git branch version check (`#custom-version-box` reading `VERSION` from `main` with a 6-hour `localStorage` cache, without requiring GitHub releases) into every generated report.
 - Provides a dark-themed Log Viewer overlay (`log-view.php`) reading the last 200 lines from `/var/lib/goaccess-db/goaccess-update.log` (hard-linked to `goaccess-update.log`) with fallback support, `Refresh`, `Close`, `ESC` handling, and automatic `DE`/`EN` labels.
 - Replaces Apache `AuthType Basic` with a session-based PHP login gate (`login.php`) verifying credentials against `.htpasswd` (`$apr1$` Apache MD5-Crypt, bcrypt `$2y$`/`$2a$`/`$2b$`, `{SHA}`), with CSRF protection, brute-force rate limiting (5 attempts -> 60s lockout), automatic `DE`/`EN` language detection (`Accept-Language`), and `.htaccess` protection for `.htaccess` and `.htpasswd`.
 - Supports 12 languages (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`) via UTF-8 system locales and stores the active language in `/var/lib/goaccess-db/.current_lang` so scheduled cron runs preserve the selected language.
@@ -33,10 +32,11 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 ```text
 dashboard-layout/goaccess/
 ├── README.md                    # Full installation and usage documentation
+├── VERSION                      # Current version string used for Git branch update checks
 ├── .gitignore                   # Ignores local *.conf files while keeping *.conf.example
 ├── goaccess.conf.example        # Template for per-user configuration (<user>.conf)
 ├── install.sh                   # Interactive installer (locales, dirs, hardlink, scripts, PHP endpoints, systemd)
-├── uninstall.sh                 # Removes systemd units, /usr/local/bin/ scripts, DBs, reports, logs & state files
+├── uninstall.sh                 # Removes systemd units, /usr/local/bin/ scripts, reports & /var/lib/goaccess-db
 ├── update-goaccess.sh           # Generates persistent HTML reports across *.conf files, syncs log hardlink & injects UI
 ├── goaccess-lang-runner.sh      # Systemd runner with flock locking and trigger cleanup
 ├── goaccess-lang.path           # Systemd path unit watching .lang_request
@@ -45,7 +45,7 @@ dashboard-layout/goaccess/
 ├── login.php                    # Custom PHP login gate verifying against .htpasswd with brute-force & CSRF protection
 ├── log-view.php                 # Authenticated JSON endpoint serving the last 200 log lines to the Log Viewer modal
 └── assets/
-    └── dashboard-inject.js      # Client-side sidebar search, language dropdown, progress overlay, log modal & CSRF logic
+    └── dashboard-inject.js      # Client-side sidebar search, language dropdown, progress overlay, log modal, version check & CSRF logic
 ```
 
 ***
@@ -101,7 +101,7 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git && git fetch origin && git checkout -t origin/main)
 ```
 
-Verify that all 11 files and the `assets/` folder are present:
+Verify that all repository files (12 files + `VERSION` + `assets/`) are present:
 
 ```bash
 ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
@@ -183,7 +183,7 @@ To keep your statistics up to date automatically without duplicating data (thank
 2. Sign in via the custom PHP login page (`/login.php`) using a valid username and password from `.htpasswd` (automatically rendered in German for `de*` browsers or English otherwise).
 3. Use the **left sidebar** (`Domains (A–Z)`) and the search input (`Domain suchen...`) to switch between all analyzed domains while keeping the bottom action buttons pinned.
 4. Use the **language dropdown** in the top-right corner of the sidebar to switch the report language. A ring progress overlay appears while `systemd` regenerates all reports in the selected language, and the page reloads automatically once finished.
-5. Click **Log anzeigen / View Log** at the bottom of the sidebar to inspect the latest log lines in the modal overlay (with `Refresh`, `Close`, and `ESC` support), or click **Abmelden / Logout** (`/login.php?logout=1`) to end your session.
+5. Click **Log anzeigen / View Log** at the bottom of the sidebar to inspect the latest log lines in the modal overlay (with `Refresh`, `Close`, and `ESC` support), check the version status right below it, or click **Abmelden / Logout** (`/login.php?logout=1`) to end your session.
 
 ***
 
@@ -200,10 +200,9 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install.sh
 
 ### Uninstalling
 
-To stop and remove the `systemd` units, helper scripts under `/usr/local/bin/`, generated databases and reports (including `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd`), state files (`.current_lang`, `.lang_request`, `.gen_progress`, `.update.log`), and `/var/lib/goaccess-db/goaccess-update.log`:
+To stop and remove the `systemd` units, helper scripts under `/usr/local/bin/`, generated reports and web files (including `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd`), local `*.conf` / `goaccess-update.log`, and the entire `/var/lib/goaccess-db` directory:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./uninstall.sh
 ```
-EOF
