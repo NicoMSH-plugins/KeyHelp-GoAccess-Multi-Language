@@ -33,8 +33,8 @@ dashboard-layout/goaccess/
 ├── VERSION                      # Current dashboard version used for Git branch update checks
 ├── .gitignore                   # Ignores local *.conf files while keeping *.conf.example
 ├── goaccess.conf.example        # Template for per-user configuration (<user>.conf)
-├── install                      # Interactive installer (permissions, locales, dirs, scripts, systemd)
-├── uninstall                    # Removes systemd units, /usr/local/bin/ scripts and generated files
+├── install                      # Interactive installer (permissions, locales, dirs, scripts, systemd, cron)
+├── uninstall                    # Removes systemd units, cronjob, /usr/local/bin/ scripts and generated files
 ├── update-goaccess.sh           # Generates HTML reports across *.conf files, mirrors logs & injects UI
 ├── goaccess-lang-runner.sh      # Systemd runner with flock locking and trigger cleanup
 ├── goaccess-lang.path           # Systemd path unit watching .lang_request
@@ -106,7 +106,7 @@ ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 
 ### Step 5: Run the Installer
 
-Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, guides you interactively through user/domain setup, domain filters, login credentials, and generates the initial reports:
+Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, guides you interactively through user/domain setup, domain filters, cron interval, and login credentials, and generates the initial reports:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
@@ -119,25 +119,21 @@ The installer automatically:
 - Enables and generates the required UTF-8 locales in `/etc/locale.gen`.
 - Creates `/var/lib/goaccess-db/<user>` with permissions for `<user>:www-data`.
 - Installs `update-goaccess.sh` and `goaccess-lang-runner.sh` to `/usr/local/bin/`.
-- Generates the initial HTML reports and sets up `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd` in your statistics webroot (`OUT_DIR`).
 - Installs and enables `goaccess-lang.path` and `goaccess-lang.service`.
+- Generates the initial HTML reports and sets up the root cronjob (with a custom minute interval and confirmation prompt).
+- Configures `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd` in your statistics webroot (`OUT_DIR`).
 
 > [!NOTE]
-> **Supporting Multiple KeyHelp Users & Custom Document Root:** You can add additional users directly via the installer prompt or by copying `goaccess.conf.example` to `<seconduser>.conf` and re-running `./install`. By default, `OUT_DIR` is `/home/users/<KH_USER>/www/<STATS_DOMAIN>` – if your subdomain in KeyHelp uses a custom document root path, set `OUT_DIR` accordingly in `<user>.conf` and run `./install` again.
+> **Supporting Multiple KeyHelp Users & Custom Document Root:** You can add additional users directly via the installer prompt when re-running `./install`. By default, `OUT_DIR` is `/home/users/<KH_USER>/www/<STATS_DOMAIN>` – if your subdomain in KeyHelp uses a custom document root path, update `OUT_DIR` in `<user>.conf` and run `./install` again.
 
-### Step 6: Set Up a Cronjob & Verify Status
+### Step 6: Verify Status & Generated Reports
 
-Check that `goaccess-lang.path` is active and reports were created:
+Check that `goaccess-lang.path`, the root cronjob, and the generated HTML reports are in place:
 
 ```bash
 systemctl is-active goaccess-lang.path
+crontab -l | grep update-goaccess.sh
 ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
-```
-
-To keep your statistics up to date automatically, add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
-
-```cron
-*/15 * * * * /usr/local/bin/update-goaccess.sh >/dev/null 2>&1
 ```
 
 ### Step 7: Open & Use GoAccess in the Browser
@@ -163,7 +159,7 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install
 
 ### Uninstalling
 
-To stop and remove the `systemd` units and helper scripts under `/usr/local/bin/`:
+To stop and remove the `systemd` units, cronjob, helper scripts under `/usr/local/bin/`, and generated files:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
