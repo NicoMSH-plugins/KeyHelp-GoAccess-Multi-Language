@@ -1,0 +1,607 @@
+#!/bin/bash
+clear
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Please run as root / Bitte als root ausfuehren."
+  exit 1
+fi
+
+if [ -t 1 ]; then
+  C_RESET="\033[0m"
+  C_BOLD="\033[1m"
+  C_DIM="\033[2m"
+  C_CYAN="\033[1;36m"
+  C_GREEN="\033[1;32m"
+  C_YELLOW="\033[1;33m"
+  C_RED="\033[1;31m"
+  C_BLUE="\033[1;34m"
+else
+  C_RESET=""
+  C_BOLD=""
+  C_DIM=""
+  C_CYAN=""
+  C_GREEN=""
+  C_YELLOW=""
+  C_RED=""
+  C_BLUE=""
+fi
+
+
+if id -u keyhelp >/dev/null 2>&1; then
+  chown -R keyhelp:keyhelp "$SCRIPT_DIR" 2>/dev/null || true
+  chmod +x "$SCRIPT_DIR/install" "$SCRIPT_DIR/uninstall" "$SCRIPT_DIR/update-goaccess.sh" "$SCRIPT_DIR/goaccess-lang-runner.sh" 2>/dev/null || true
+  echo -e "${C_DIM}[i] Dateirechte im GoAccess-Verzeichnis auf keyhelp:keyhelp gesetzt.${C_RESET}"
+fi
+
+echo ""
+echo -e "${C_BOLD}Select installer & report language / Sprache waehlen:${C_RESET}"
+echo "  1) Deutsch (de)"
+echo "  2) English (en)"
+read -rp "Choice / Auswahl [1]: " LANG_CHOICE
+case "${LANG_CHOICE:-1}" in
+  2|en|EN|english|English)
+    UI_LANG="en"
+    ;;
+  *)
+    UI_LANG="de"
+    ;;
+esac
+clear
+
+tr_txt() {
+  local de_str="$1"
+  local en_str="$2"
+  if [ "$UI_LANG" = "en" ]; then
+    printf "%s" "$en_str"
+  else
+    printf "%s" "$de_str"
+  fi
+}
+
+echo ""
+echo -e "${C_BLUE}====================================================================${C_RESET}"
+echo -e "  ${C_BOLD}${C_CYAN}KeyHelp GoAccess Multi-Language Dashboard${C_RESET}"
+echo -e "  ${C_DIM}$(tr_txt "Autor:" "Author:")${C_RESET} ${C_BOLD}NicoMSH${C_RESET}"
+echo -e "  ${C_DIM}GitHub:${C_RESET} ${C_GREEN}https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language${C_RESET}"
+echo -e "  ${C_DIM}$(tr_txt "Info:" "About:")${C_RESET} $(tr_txt "Richtet GoAccess-Reports inkl. Sprachumschaltung, DB und Login fuer KeyHelp ein." "Sets up GoAccess reports with language switching, DB and login for KeyHelp.")"
+echo -e "${C_BLUE}====================================================================${C_RESET}"
+echo ""
+
+read -rp "$(tr_txt "Installation starten? [j/N]: " "Start installation? [y/N]: ")" START_INSTALL
+case "${START_INSTALL:-n}" in
+  j|J|ja|Ja|y|Y|yes|Yes)
+    clear
+    ;;
+  *)
+    echo ""
+    echo -e "${C_YELLOW}$(tr_txt "Installation abgebrochen." "Installation cancelled.")${C_RESET}"
+    exit 0
+    ;;
+esac
+
+step() {
+  echo -e "\n${C_CYAN}==> $1${C_RESET}"
+}
+ok() {
+  echo -e "${C_GREEN}  [OK] $1${C_RESET}"
+}
+warn() {
+  echo -e "${C_YELLOW}  [!] $1${C_RESET}"
+}
+err() {
+  echo -e "${C_RED}  [ERR] $1${C_RESET}"
+}
+
+die_step() {
+  local step_tag="$1"
+  local msg="$2"
+  local rc="${3:-1}"
+  err "[${step_tag}] ABBRUCH (Exit ${rc}): ${msg}"
+  exit "$rc"
+}
+
+run_step_cmd() {
+  local step_tag="$1"
+  local desc="$2"
+  shift 2
+  if ! "$@"; then
+    local rc=$?
+    die_step "$step_tag" "${desc} fehlgeschlagen ($*)" "$rc"
+  fi
+}
+
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then err "Unerwarteter Abbruch in Zeile ${LINENO} (Exit ${rc}): ${BASH_COMMAND}"; fi' ERR
+
+show_user_step_header() {
+  local show_users="${1:-1}"
+  local avail_users
+  step "$(tr_txt "Benutzer- und Domain-Konfiguration..." "User and domain configuration...")"
+  if [ "$show_users" = "1" ]; then
+    avail_users=$(for d in /home/users/*/; do [ -d "${d}logs" ] && basename "$d"; done | tr "\n" " ")
+    [ -n "$avail_users" ] && echo -e "  $(tr_txt "Gefundene Benutzer:" "Available users:") ${C_BOLD}${avail_users}${C_RESET}"
+  fi
+}
+
+show_user_step_header 1
+
+shopt -s nullglob
+CONF_FILES=("$SCRIPT_DIR"/*.conf)
+shopt -u nullglob
+
+add_user_conf() {
+  local owner_user cf cf_user cf_dom non_default_files RE_USER RE_DOM OVERWRITE_DOM CONFIRM_CFG
+  while true; do
+    while true; do
+      read -rp "$(tr_txt "KeyHelp Kunden-Benutzername [exampleuser]: " "KeyHelp customer username [exampleuser]: ")" KH_USER
+      KH_USER="${KH_USER:-exampleuser}"
+
+      if [ ! -d "/home/users/${KH_USER}" ]; then
+        warn "$(tr_txt "Benutzer '${KH_USER}' unter /home/users/ nicht vorhanden! (Tippfehler?)" "User '${KH_USER}' not found under /home/users/! (Typo?)")"
+        read -rp "$(tr_txt "Benutzername erneut eingeben? [J/n]: " "Re-enter username? [Y/n]: ")" RE_USER
+        clear
+        show_user_step_header 1
+        case "${RE_USER:-j}" in
+          n|N|no|No)
+            clear
+            show_user_step_header 0
+            break
+            ;;
+        esac
+      else
+        clear
+        show_user_step_header 0
+        break
+      fi
+    done
+
+    while true; do
+      read -rp "$(tr_txt "Statistik-Domain [stats.example.com]: " "Statistics domain [stats.example.com]: ")" STATS_DOMAIN
+      STATS_DOMAIN="${STATS_DOMAIN:-stats.example.com}"
+
+      if [ ! -d "/home/users/${KH_USER}/www/${STATS_DOMAIN}" ]; then
+        warn "$(tr_txt "Verzeichnis /home/users/${KH_USER}/www/${STATS_DOMAIN} nicht vorhanden (Tippfehler pruefen oder Subdomain in KeyHelp anlegen)." "Directory /home/users/${KH_USER}/www/${STATS_DOMAIN} not found (check for typo or create subdomain in KeyHelp).")"
+        read -rp "$(tr_txt "Statistik-Domain erneut eingeben? [J/n]: " "Re-enter statistics domain? [Y/n]: ")" RE_DOM
+        clear
+        show_user_step_header 0
+        case "${RE_DOM:-j}" in
+          n|N|no|No) ;;
+          *) continue ;;
+        esac
+      fi
+
+      non_default_files=$(find "/home/users/${KH_USER}/www/${STATS_DOMAIN}" -mindepth 1 -maxdepth 1 ! -name "index.html" ! -name "bulma.min.css" 2>/dev/null)
+      if [ -d "/home/users/${KH_USER}/www/${STATS_DOMAIN}" ] && [ -n "$non_default_files" ]; then
+        err "$(tr_txt "ACHTUNG: Im Verzeichnis /home/users/${KH_USER}/www/${STATS_DOMAIN} liegen bereits Dateien! Bestehende Dateien (z.B. index.html / Reports) koennen ueberschrieben werden." "WARNING: The directory /home/users/${KH_USER}/www/${STATS_DOMAIN} is not empty! Existing files (e.g. index.html / reports) may be overwritten.")"
+        read -rp "$(tr_txt "Trotzdem diese Domain verwenden? [j/N]: " "Use this domain anyway? [y/N]: ")" OVERWRITE_DOM
+        clear
+        show_user_step_header 0
+        case "${OVERWRITE_DOM:-n}" in
+          j|J|ja|Ja|y|Y|yes|Yes) ;;
+          *) continue ;;
+        esac
+      fi
+
+      owner_user=""
+      for cf in "$SCRIPT_DIR"/*.conf; do
+        [ -e "$cf" ] || continue
+        cf_user=$(grep -E "^KH_USER=" "$cf" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "\"'")
+        cf_dom=$(grep -E "^STATS_DOMAIN=" "$cf" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "\"'")
+        if [ "$cf_dom" = "$STATS_DOMAIN" ] && [ "$cf_user" != "$KH_USER" ]; then
+          owner_user="$cf_user"
+          break
+        fi
+      done
+
+      if [ -n "$owner_user" ]; then
+        err "$(tr_txt "Die Subdomain ${STATS_DOMAIN} hat bereits Statistik-Daten von Benutzer ${owner_user}!" "The subdomain ${STATS_DOMAIN} already has statistics from user ${owner_user}!")"
+        warn "$(tr_txt "Schreiben verweigert. Bitte lege eine andere Statistik-Subdomain an und gib diese hier ein." "Write denied. Please create a different statistics subdomain and enter it here.")"
+        read -rp "$(tr_txt "Andere Statistik-Domain eingeben? [J/n]: " "Enter another statistics domain? [Y/n]: ")" RE_DOM
+        clear
+        show_user_step_header 0
+        case "${RE_DOM:-j}" in
+          n|N|no|No) break ;;
+          *) continue ;;
+        esac
+      else
+        break
+      fi
+    done
+
+    clear
+    step "$(tr_txt "Angaben pruefen..." "Verify configuration...")"
+    echo ""
+    echo -e "  $(tr_txt "Gewaehlter Benutzer:" "Selected user:")     ${C_BOLD}${KH_USER}${C_RESET}"
+    echo -e "  $(tr_txt "Statistik-Domain:" "Statistics domain:")   ${C_BOLD}${STATS_DOMAIN}${C_RESET}"
+    echo ""
+    read -rp "$(tr_txt "Sind diese Angaben richtig? [J/n]: " "Are these settings correct? [Y/n]: ")" CONFIRM_CFG
+    case "${CONFIRM_CFG:-j}" in
+      n|N|no|No|nein|Nein)
+        clear
+        show_user_step_header 1
+        continue
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local target_conf="$SCRIPT_DIR/${KH_USER}.conf"
+  local excl_clean hide_clean
+  excl_clean="$(printf '%s' "${NEW_EXCL:-}" | tr '\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+  hide_clean="$(printf '%s' "${NEW_HIDE:-}" | tr '\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+
+  {
+    printf 'KH_USER="%s"\n' "$KH_USER"
+    printf 'STATS_DOMAIN="%s"\n' "$STATS_DOMAIN"
+    printf 'OUT_DIR="/home/users/%s/www/%s"\n' "$KH_USER" "$STATS_DOMAIN"
+    printf 'DB_BASE="/var/lib/goaccess-db/%s"\n' "$KH_USER"
+    printf 'LOG_BASE="/home/users/%s/logs"\n' "$KH_USER"
+    printf "KEYHELP_FMT='%s'\n" "${KEYHELP_FMT:-%h %^[%d:%t %^] \"%r\" %s %b \"%R\" \"%u\" %^ %^}"
+    printf "DATE_FMT='%s'\n" "${DATE_FMT:-%d/%b/%Y}"
+    printf "TIME_FMT='%s'\n" "${TIME_FMT:-%H:%M:%S}"
+    printf 'EXCLUDE_DOMAINS="%s"\n' "$excl_clean"
+    printf 'HIDE_NAV_DOMAINS="%s"\n' "$hide_clean"
+    printf 'DEFAULT_LANG="%s"\n' "${DEFAULT_LANG:-${UI_LANG}}"
+  } > "$target_conf" || die_step "Setup" "Konnte ${target_conf} nicht schreiben" "$?"
+  chown keyhelp:keyhelp "$target_conf" 2>/dev/null || true
+  ok "$(tr_txt "Erstellt: ${target_conf}" "Created: ${target_conf}")"
+}
+
+if [ "${#CONF_FILES[@]}" -eq 0 ]; then
+  add_user_conf
+else
+  existing_users=""
+  for cf in "${CONF_FILES[@]}"; do
+    u_val=$(grep -E "^KH_USER=" "$cf" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "\"'")
+    [ -n "$u_val" ] && existing_users="${existing_users} ${u_val}"
+  done
+  ok "$(tr_txt "Bereits eingerichtete Benutzer:${existing_users}" "Already configured users:${existing_users}")"
+  read -rp "$(tr_txt "Moechtest du einen weiteren Benutzer anlegen? [j/N]: " "Do you want to add another user? [y/N]: ")" ADD_MORE
+  case "${ADD_MORE:-n}" in
+    j|J|ja|Ja|y|Y|yes|Yes)
+      clear
+      show_user_step_header 1
+      add_user_conf
+      ;;
+  esac
+fi
+
+shopt -s nullglob
+CONF_FILES=("$SCRIPT_DIR"/*.conf)
+shopt -u nullglob
+[ "${#CONF_FILES[@]}" -gt 0 ] || die_step "Setup" "Keine *.conf Dateien in ${SCRIPT_DIR} vorhanden" 1
+
+sleep 2
+clear
+
+step "$(tr_txt "[1/6] Aktiviere und generiere UTF-8 Locales (kann je nach System kurz dauern)..." "[1/6] Enabling and generating UTF-8 locales (this may take a moment)...")"
+for loc in de_DE.UTF-8 en_US.UTF-8 es_ES.UTF-8 fr_FR.UTF-8 it_IT.UTF-8 ja_JP.UTF-8 ko_KR.UTF-8 pt_BR.UTF-8 ru_RU.UTF-8 sv_SE.UTF-8 uk_UA.UTF-8 zh_CN.UTF-8; do
+  run_step_cmd "1/6" "locale.gen anpassen fuer ${loc}" sed -i "s/^# *${loc} UTF-8/${loc} UTF-8/" /etc/locale.gen
+done
+run_step_cmd "1/6" "locale-gen" locale-gen
+ok "$(tr_txt "Locales fertig." "Locales generated.")"
+sleep 3
+clear
+
+show_filter_step_header() {
+  local kh_user="$1"
+  step "$(tr_txt "[2/6] Richte Datenbank-Verzeichnisse und Skripte unter /usr/local/bin ein..." "[2/6] Setting up database directories and scripts in /usr/local/bin...")"
+  echo ""
+  echo -e "${C_BOLD}  $(tr_txt "Domain-Filter fuer ${kh_user}:" "Domain filters for ${kh_user}:")${C_RESET}"
+}
+
+select_domains_for_var() {
+  local kh_user="$1"
+  local raw_skip="$2"
+  local prompt_ask="$3"
+  local prompt_pick="$4"
+  local log_base="/home/users/${kh_user}/logs"
+  local ans selection idx d_name token num chosen_list
+  local -a doms=() chosen=()
+  local -A skip_map=()
+
+  [ -d "$log_base" ] || { printf ""; return; }
+
+  for token in $raw_skip; do
+    token="${token//,/}"
+    [ -n "$token" ] && skip_map["$token"]=1
+  done
+
+  while IFS= read -r -d '' d_path; do
+    d_name="$(basename "$d_path")"
+    [ -n "${skip_map[$d_name]+x}" ] && continue
+    doms+=("$d_name")
+  done < <(find "$log_base" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | LC_ALL=C sort -z)
+
+  [ "${#doms[@]}" -eq 0 ] && { printf ""; return; }
+
+  read -rp "$prompt_ask" ans
+  case "${ans:-n}" in
+    j|J|ja|Ja|y|Y|yes|Yes)
+      echo "" >&2
+      idx=1
+      for d_name in "${doms[@]}"; do
+        printf "  %2d) %s\n" "$idx" "$d_name" >&2
+        idx=$((idx + 1))
+      done
+      echo "" >&2
+      read -rp "$prompt_pick" selection
+      selection="${selection//,/ }"
+      for token in $selection; do
+        if [[ "$token" =~ ^[0-9]+$ ]]; then
+          num=$((10#$token))
+          if [ "$num" -ge 1 ] && [ "$num" -le "${#doms[@]}" ]; then
+            d_name="${doms[$((num - 1))]}"
+            if [[ " ${chosen[*]} " != *" ${d_name} "* ]]; then
+              chosen+=("$d_name")
+            fi
+          fi
+        fi
+      done
+      chosen_list="${chosen[*]}"
+      printf "%s" "$chosen_list"
+      ;;
+    *)
+      printf ""
+      ;;
+  esac
+}
+
+show_filter_step_header ""
+
+for CONF_FILE in "${CONF_FILES[@]}"; do
+  [ -e "$CONF_FILE" ] || continue
+  KH_USER=""
+  STATS_DOMAIN=""
+  OUT_DIR=""
+  DB_BASE=""
+  LOG_BASE=""
+  KEYHELP_FMT='%h %^[%d:%t %^] "%r" %s %b "%R" "%u" %^ %^'
+  DATE_FMT='%d/%b/%Y'
+  TIME_FMT='%H:%M:%S'
+  EXCLUDE_DOMAINS=""
+  HIDE_NAV_DOMAINS=""
+  DEFAULT_LANG="${UI_LANG}"
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
+  [ -n "$KH_USER" ] || die_step "2/6" "KH_USER fehlt in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "2/6" "STATS_DOMAIN fehlt in ${CONF_FILE}" 1
+
+  OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
+  DB_BASE="/var/lib/goaccess-db/${KH_USER}"
+  LOG_BASE="/home/users/${KH_USER}/logs"
+
+  while true; do
+    clear
+    show_filter_step_header "$KH_USER"
+    NEW_EXCL=$(select_domains_for_var \
+      "$KH_USER" \
+      "" \
+      "$(tr_txt "Moechtest du Domains ausschliessen (kein Report)? [j/N]: " "Do you want to exclude domains (no report)? [y/N]: ")" \
+      "$(tr_txt "Nummern eingeben (z.B. 1 3 oder 1,3, Enter = keine): " "Enter numbers (e.g. 1 3 or 1,3, Enter = none): ")")
+
+    clear
+    show_filter_step_header "$KH_USER"
+    NEW_HIDE=$(select_domains_for_var \
+      "$KH_USER" \
+      "$NEW_EXCL" \
+      "$(tr_txt "Moechtest du Domains in der Navigation verstecken? [j/N]: " "Do you want to hide domains in navigation? [y/N]: ")" \
+      "$(tr_txt "Nummern eingeben (z.B. 2 4 oder 2,4, Enter = keine): " "Enter numbers (e.g. 2 4 or 2,4, Enter = none): ")")
+
+    NEW_EXCL="$(printf '%s' "$NEW_EXCL" | tr '\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+    NEW_HIDE="$(printf '%s' "$NEW_HIDE" | tr '\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+
+    clear
+    step "$(tr_txt "Angaben pruefen..." "Verify domain filters...")"
+    echo ""
+    echo -e "  $(tr_txt "Benutzer:" "User:")                      ${C_BOLD}${KH_USER}${C_RESET}"
+    echo -e "  $(tr_txt "Ausgeschlossene Domains:" "Excluded domains:")       ${C_BOLD}${NEW_EXCL:-$(tr_txt "keine" "none")}${C_RESET}"
+    echo -e "  $(tr_txt "Versteckte Nav-Domains:" "Hidden nav domains:")      ${C_BOLD}${NEW_HIDE:-$(tr_txt "keine" "none")}${C_RESET}"
+    echo ""
+    read -rp "$(tr_txt "Sind diese Angaben richtig? [J/n]: " "Are these settings correct? [Y/n]: ")" CONFIRM_FILTERS
+    case "${CONFIRM_FILTERS:-j}" in
+      n|N|no|No|nein|Nein)
+        continue
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  clear
+  show_filter_step_header "$KH_USER"
+
+  {
+    printf 'KH_USER="%s"\n' "$KH_USER"
+    printf 'STATS_DOMAIN="%s"\n' "$STATS_DOMAIN"
+    printf 'OUT_DIR="/home/users/%s/www/%s"\n' "$KH_USER" "$STATS_DOMAIN"
+    printf 'DB_BASE="/var/lib/goaccess-db/%s"\n' "$KH_USER"
+    printf 'LOG_BASE="/home/users/%s/logs"\n' "$KH_USER"
+    printf "KEYHELP_FMT='%s'\n" "$KEYHELP_FMT"
+    printf "DATE_FMT='%s'\n" "$DATE_FMT"
+    printf "TIME_FMT='%s'\n" "$TIME_FMT"
+    printf 'EXCLUDE_DOMAINS="%s"\n' "$NEW_EXCL"
+    printf 'HIDE_NAV_DOMAINS="%s"\n' "$NEW_HIDE"
+    printf 'DEFAULT_LANG="%s"\n' "${DEFAULT_LANG:-${UI_LANG}}"
+  } > "$CONF_FILE" || die_step "2/6" "Konnte ${CONF_FILE} nicht aktualisieren" "$?"
+  chown keyhelp:keyhelp "$CONF_FILE" 2>/dev/null || true
+  ok "$(tr_txt "Domain-Filter in ${CONF_FILE} gespeichert (Exclude: '${NEW_EXCL:-none}' | Hide Nav: '${NEW_HIDE:-none}')." "Saved domain filters in ${CONF_FILE} (Exclude: '${NEW_EXCL:-none}' | Hide Nav: '${NEW_HIDE:-none}').")"
+done
+
+run_step_cmd "2/6" "Verzeichnis /var/lib/goaccess-db anlegen" mkdir -p /var/lib/goaccess-db
+run_step_cmd "2/6" "Rechte fuer /var/lib/goaccess-db setzen" chmod 1777 /var/lib/goaccess-db
+
+run_step_cmd "2/6" "update-goaccess.sh kopieren" cp -f "$SCRIPT_DIR/update-goaccess.sh" /usr/local/bin/update-goaccess.sh
+run_step_cmd "2/6" "goaccess-lang-runner.sh kopieren" cp -f "$SCRIPT_DIR/goaccess-lang-runner.sh" /usr/local/bin/goaccess-lang-runner.sh
+run_step_cmd "2/6" "Ausfuehrungsrechte unter /usr/local/bin setzen" chmod +x /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh
+
+for CONF_FILE in "${CONF_FILES[@]}"; do
+  [ -e "$CONF_FILE" ] || continue
+  KH_USER=""
+  STATS_DOMAIN=""
+  OUT_DIR=""
+  DB_BASE=""
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
+  [ -n "$KH_USER" ] || die_step "2/6" "KH_USER leer in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "2/6" "STATS_DOMAIN leer in ${CONF_FILE}" 1
+
+  OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
+  DB_BASE="/var/lib/goaccess-db/${KH_USER}"
+
+  run_step_cmd "2/6" "Verzeichnisse fuer ${KH_USER} anlegen" mkdir -p "$DB_BASE" "$OUT_DIR"
+  run_step_cmd "2/6" "Eigentuemer fuer ${DB_BASE} setzen" chown -R "${KH_USER}:www-data" "$DB_BASE"
+  run_step_cmd "2/6" "Rechte fuer ${DB_BASE} setzen" chmod 770 "$DB_BASE"
+
+  run_step_cmd "2/6" "gen-lang.php kopieren" cp -f "$SCRIPT_DIR/gen-lang.php" "${OUT_DIR}/gen-lang.php"
+  run_step_cmd "2/6" "Eigentuemer fuer gen-lang.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/gen-lang.php"
+  ok "$(tr_txt "Eingerichtet fuer ${KH_USER} -> ${OUT_DIR}" "Configured for ${KH_USER} -> ${OUT_DIR}")"
+done
+sleep 3
+clear
+
+step "$(tr_txt "[3/6] Installiere und starte systemd Units..." "[3/6] Installing and starting systemd units...")"
+run_step_cmd "3/6" "goaccess-lang.path kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.path" /etc/systemd/system/goaccess-lang.path
+run_step_cmd "3/6" "goaccess-lang.service kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.service" /etc/systemd/system/goaccess-lang.service
+run_step_cmd "3/6" "systemctl daemon-reload" systemctl daemon-reload
+run_step_cmd "3/6" "goaccess-lang.path aktivieren" systemctl enable --now goaccess-lang.path
+ok "$(tr_txt "systemd Units aktiv." "systemd units enabled.")"
+sleep 3
+clear
+
+step "$(tr_txt "[4/6] Erzeuge initiale GoAccess-Reports (inkl. .gz-Archiven)..." "[4/6] Generating initial GoAccess reports (including .gz archives)...")"
+run_step_cmd "4/6" "update-goaccess.sh ausfuehren" /usr/local/bin/update-goaccess.sh
+ok "$(tr_txt "HTML-Reports erfolgreich erstellt." "HTML reports generated successfully.")"
+sleep 3
+clear
+
+step "$(tr_txt "[5/6] Cronjob fuer automatische Aktualisierung einrichten..." "[5/6] Setting up cronjob for automatic updates...")"
+CRON_CMD="/usr/local/bin/update-goaccess.sh >/dev/null 2>&1"
+EXISTING_CRON=$(crontab -l 2>/dev/null || true)
+
+if printf '%s\n' "$EXISTING_CRON" | grep -Fq "/usr/local/bin/update-goaccess.sh"; then
+  CURRENT_LINE=$(printf '%s\n' "$EXISTING_CRON" | grep -F "/usr/local/bin/update-goaccess.sh" | head -n1)
+  ok "$(tr_txt "Bestehender Cronjob gefunden: ${CURRENT_LINE}" "Existing cronjob found: ${CURRENT_LINE}")"
+  read -rp "$(tr_txt "Intervall neu setzen? [j/N]: " "Update interval? [y/N]: ")" UPD_CRON
+  case "${UPD_CRON:-n}" in
+    j|J|ja|Ja|y|Y|yes|Yes)
+      while true; do
+        read -rp "$(tr_txt "Neues Intervall in Minuten (1-59) [15]: " "New interval in minutes (1-59) [15]: ")" CRON_MINS
+        CRON_MINS="${CRON_MINS:-15}"
+        if [[ "$CRON_MINS" =~ ^[0-9]+$ ]] && [ "$CRON_MINS" -ge 1 ] && [ "$CRON_MINS" -le 59 ]; then
+          break
+        fi
+        err "$(tr_txt "Bitte eine Zahl zwischen 1 und 59 eingeben." "Please enter a number between 1 and 59.")"
+      done
+      while true; do
+        read -rp "$(tr_txt "Neues Intervall in Minuten (1-59) [15]: " "New interval in minutes (1-59) [15]: ")" CRON_MINS
+        CRON_MINS="${CRON_MINS:-15}"
+        if [[ "$CRON_MINS" =~ ^[0-9]+$ ]] && [ "$CRON_MINS" -ge 1 ] && [ "$CRON_MINS" -le 59 ]; then
+          read -rp "$(tr_txt "Wirklich ${CRON_MINS} Minuten uebernehmen? [J/n]: " "Really apply ${CRON_MINS} minutes? [Y/n]: ")" CONFIRM_MINS
+          case "${CONFIRM_MINS:-j}" in
+            n|N|no|No|nein|Nein) continue ;;
+            *) break ;;
+          esac
+        fi
+        err "$(tr_txt "Bitte eine Zahl zwischen 1 und 59 eingeben." "Please enter a number between 1 and 59.")"
+      done
+      CRON_LINE="*/${CRON_MINS} * * * * ${CRON_CMD}"
+      FILTERED_CRON=$(printf '%s\n' "$EXISTING_CRON" | grep -Fv "/usr/local/bin/update-goaccess.sh" || true)
+      {
+        [ -n "$FILTERED_CRON" ] && printf '%s\n' "$FILTERED_CRON"
+        printf '%s\n' "$CRON_LINE"
+      } | crontab - || die_step "5/6" "Konnte Crontab nicht aktualisieren" "$?"
+      ok "$(tr_txt "Cronjob aktualisiert: ${CRON_LINE}" "Cronjob updated: ${CRON_LINE}")"
+      ;;
+  esac
+else
+  while true; do
+    read -rp "$(tr_txt "Aktualisierungs-Intervall in Minuten (1-59) [15]: " "Update interval in minutes (1-59) [15]: ")" CRON_MINS
+    CRON_MINS="${CRON_MINS:-15}"
+    if [[ "$CRON_MINS" =~ ^[0-9]+$ ]] && [ "$CRON_MINS" -ge 1 ] && [ "$CRON_MINS" -le 59 ]; then
+      break
+    fi
+    err "$(tr_txt "Bitte eine Zahl zwischen 1 und 59 eingeben." "Please enter a number between 1 and 59.")"
+  done
+
+  CRON_LINE="*/${CRON_MINS} * * * * ${CRON_CMD}"
+  {
+    [ -n "$EXISTING_CRON" ] && printf '%s\n' "$EXISTING_CRON"
+    printf '%s\n' "$CRON_LINE"
+  } | crontab - || die_step "5/6" "Konnte Crontab nicht aktualisieren" "$?"
+  ok "$(tr_txt "Cronjob eingetragen: ${CRON_LINE}" "Cronjob added: ${CRON_LINE}")"
+fi
+sleep 3
+clear
+
+step "$(tr_txt "[6/6] Richte Passwortschutz (.htaccess) und Login-Seite ein..." "[6/6] Setting up password protection (.htaccess) and login page...")"
+for CONF_FILE in "${CONF_FILES[@]}"; do
+  [ -e "$CONF_FILE" ] || continue
+  KH_USER=""
+  STATS_DOMAIN=""
+  OUT_DIR=""
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
+  [ -n "$KH_USER" ] || die_step "6/6" "KH_USER leer in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "6/6" "STATS_DOMAIN leer in ${CONF_FILE}" 1
+  OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
+
+  echo ""
+  echo -e "${C_BOLD}  $(tr_txt "Passwortschutz (.htaccess) fuer ${STATS_DOMAIN} einrichten:" "Set up password protection (.htaccess) for ${STATS_DOMAIN}:")${C_RESET}"
+  read -rp "$(tr_txt "Benutzername fuer den Login [statsuser]: " "Login username [statsuser]: ")" HT_USER
+  HT_USER="${HT_USER:-statsuser}"
+  while true; do
+    read -srp "$(tr_txt "Passwort eingeben: " "Enter password: ")" HT_PASS
+    echo ""
+    read -srp "$(tr_txt "Passwort bestaetigen: " "Confirm password: ")" HT_PASS2
+    echo ""
+    if [ -n "$HT_PASS" ] && [ "$HT_PASS" = "$HT_PASS2" ]; then
+      break
+    fi
+    err "$(tr_txt "Passwoerter sind leer oder stimmen nicht ueberein." "Passwords are empty or do not match.")"
+  done
+
+  if command -v htpasswd >/dev/null 2>&1; then
+    run_step_cmd "6/6" ".htpasswd erstellen" htpasswd -bc "${OUT_DIR}/.htpasswd" "$HT_USER" "$HT_PASS"
+  else
+    HT_HASH=$(openssl passwd -apr1 "$HT_PASS") || die_step "6/6" "openssl passwd fehlgeschlagen" "$?"
+    printf "%s:%s\n" "$HT_USER" "$HT_HASH" > "${OUT_DIR}/.htpasswd" || die_step "6/6" ".htpasswd schreiben fehlgeschlagen" "$?"
+  fi
+
+  if [ -f "${SCRIPT_DIR}/login.php" ]; then
+    run_step_cmd "6/6" "login.php kopieren" cp -f "${SCRIPT_DIR}/login.php" "${OUT_DIR}/login.php"
+  fi
+  run_step_cmd "6/6" "/var/lib/goaccess-db sicherstellen" mkdir -p /var/lib/goaccess-db
+  run_step_cmd "6/6" "Logdatei anlegen" touch "${SCRIPT_DIR}/goaccess-update.log"
+  ln -sf "${SCRIPT_DIR}/goaccess-update.log" /var/lib/goaccess-db/goaccess-update.log 2>/dev/null || true
+  if [ -f "${SCRIPT_DIR}/log-view.php" ]; then
+    run_step_cmd "6/6" "log-view.php kopieren" cp -f "${SCRIPT_DIR}/log-view.php" "${OUT_DIR}/log-view.php"
+    run_step_cmd "6/6" "Rechte fuer log-view.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/log-view.php"
+    run_step_cmd "6/6" "Modus fuer log-view.php setzen" chmod 640 "${OUT_DIR}/log-view.php"
+  fi
+
+  cat <<'HTEOF' > "${OUT_DIR}/.htaccess" || die_step "6/6" ".htaccess schreiben fehlgeschlagen" "$?"
+<FilesMatch "^(\.htaccess|\.htpasswd)$">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_URI} !^/login\.php$
+  RewriteRule ^(.*)$ /login.php?_gate=1&_target=$1 [L,QSA]
+</IfModule>
+HTEOF
+  run_step_cmd "6/6" "Rechte fuer .htaccess und .htpasswd setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/.htaccess" "${OUT_DIR}/.htpasswd"
+  [ -f "${OUT_DIR}/login.php" ] && run_step_cmd "6/6" "Rechte fuer login.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/login.php" && run_step_cmd "6/6" "Modus fuer login.php setzen" chmod 640 "${OUT_DIR}/login.php"
+  run_step_cmd "6/6" "Modus fuer .htpasswd setzen" chmod 640 "${OUT_DIR}/.htpasswd"
+  run_step_cmd "6/6" "Modus fuer .htaccess setzen" chmod 644 "${OUT_DIR}/.htaccess"
+  ok "$(tr_txt "Login-Seite (login.php), .htaccess und .htpasswd fuer ${STATS_DOMAIN} angelegt." "Created login page (login.php), .htaccess and .htpasswd for ${STATS_DOMAIN}.")"
+
+  echo -e "${C_GREEN}${C_BOLD}  >>> $(tr_txt "Statistiken fuer ${KH_USER} sind jetzt verfuegbar unter: https://${STATS_DOMAIN}/" "Statistics for ${KH_USER} are now available at: https://${STATS_DOMAIN}/")${C_RESET}"
+done
+
+ok "$(tr_txt "Installation und Report-Generierung abgeschlossen." "Installation and report generation completed.")"

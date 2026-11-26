@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for GoAccess language generation trigger
+
+[Path]
+PathChanged=/var/lib/goaccess-db/.lang_request
+PathChanged=/var/lib/goaccess-db/.update_request
+Unit=goaccess-lang.service
+
+[Install]
+WantedBy=multi-user.target

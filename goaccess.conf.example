@@ -1,0 +1,13 @@
+KH_USER="exampleuser"
+STATS_DOMAIN="stats.example.com"
+OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
+DB_BASE="/var/lib/goaccess-db/${KH_USER}"
+LOG_BASE="/home/users/${KH_USER}/logs"
+
+KEYHELP_FMT='%h %^[%d:%t %^] "%r" %s %b "%R" "%u" %^ %^'
+DATE_FMT='%d/%b/%Y'
+TIME_FMT='%H:%M:%S'
+
+EXCLUDE_DOMAINS=""
+HIDE_NAV_DOMAINS=""
+DEFAULT_LANG="de"

@@ -1,0 +1,198 @@
+#!/bin/bash
+clear
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+C_GREEN="\033[0;32m"
+C_RED="\033[0;31m"
+C_YELLOW="\033[0;33m"
+C_RESET="\033[0m"
+
+step_ok() {
+  echo -e "${C_GREEN}[OK]${C_RESET} $1"
+}
+
+step_info() {
+  local title="$1"
+  local reason="${2:-Kein Handlungsbedarf}"
+  echo -e "${C_YELLOW}[Info]${C_RESET} ${title}"
+  echo -e "  Grund: ${reason}"
+}
+
+step_fail() {
+  local title="$1"
+  local reason="${2:-Unbekannter Fehler}"
+  echo -e "${C_RED}[Failed]${C_RESET} ${title}"
+  echo -e "  Grund: ${reason}"
+}
+
+# 1. Systemd-Units stoppen, deaktivieren, entfernen und daemon-reload
+for unit in goaccess-lang.path goaccess-lang.service; do
+  if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q "^${unit}"; then
+    if systemctl disable --now "$unit" >/dev/null 2>&1; then
+      step_ok "Systemd-Unit ${unit} gestoppt und deaktiviert."
+    else
+      step_fail "Systemd-Unit ${unit} stoppen und deaktivieren." "systemctl disable --now fehlgeschlagen."
+    fi
+  else
+    step_info "Systemd-Unit ${unit} uebersprungen." "Unit ist nicht in systemd registriert."
+  fi
+
+  unit_file="/etc/systemd/system/${unit}"
+  if [ -e "$unit_file" ]; then
+    if rm -f "$unit_file" 2>/dev/null; then
+      step_ok "Unit-Datei ${unit_file} entfernt."
+    else
+      step_fail "Unit-Datei ${unit_file} entfernen." "Datei konnte nicht geloescht werden."
+    fi
+  else
+    step_info "Unit-Datei ${unit_file} uebersprungen." "Datei existiert nicht."
+  fi
+done
+
+if systemctl daemon-reload >/dev/null 2>&1; then
+  step_ok "Systemd-Daemon neu geladen."
+else
+  step_fail "Systemd-Daemon neu laden." "systemctl daemon-reload fehlgeschlagen."
+fi
+
+# 2. Skripte unter /usr/local/bin/ entfernen
+for bin_path in /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh; do
+  if [ -e "$bin_path" ] || [ -L "$bin_path" ]; then
+    if rm -f "$bin_path" 2>/dev/null; then
+      step_ok "Skript ${bin_path} entfernt."
+    else
+      step_fail "Skript ${bin_path} entfernen." "Datei oder Symlink konnte nicht geloescht werden."
+    fi
+  else
+    step_info "Skript ${bin_path} uebersprungen." "Datei oder Symlink existiert nicht."
+  fi
+done
+
+# 2a. Cronjob fuer update-goaccess.sh aus Root-Crontab entfernen
+EXISTING_CRON=$(crontab -l 2>/dev/null || true)
+if printf '%s\n' "$EXISTING_CRON" | grep -Fq "/usr/local/bin/update-goaccess.sh"; then
+  FILTERED_CRON=$(printf '%s\n' "$EXISTING_CRON" | grep -Fv "/usr/local/bin/update-goaccess.sh" || true)
+  if printf '%s\n' "$FILTERED_CRON" | crontab - 2>/dev/null; then
+    step_ok "Cronjob fuer update-goaccess.sh aus Root-Crontab entfernt."
+  else
+    step_fail "Cronjob aus Root-Crontab entfernen." "crontab konnte nicht aktualisiert werden."
+  fi
+else
+  step_info "Cronjob-Bereinigung uebersprungen." "Kein Eintrag fuer update-goaccess.sh in Crontab gefunden."
+fi
+
+# 2b. Backup-Dateien (*.bak.*) unter /usr/local/bin/ und im Repo entfernen
+shopt -s nullglob
+bak_files=(/usr/local/bin/update-goaccess.sh.bak.* "$SCRIPT_DIR"/assets/*.bak.*)
+shopt -u nullglob
+if [ "${#bak_files[@]}" -gt 0 ]; then
+  if rm -f "${bak_files[@]}" 2>/dev/null; then
+    step_ok "Backup-Dateien (${#bak_files[@]}) entfernt."
+  else
+    step_fail "Backup-Dateien entfernen." "Eine oder mehrere .bak-Dateien konnten nicht geloescht werden."
+  fi
+else
+  step_info "Backup-Bereinigung uebersprungen." "Keine .bak-Dateien vorhanden."
+fi
+
+# 3. Datenbanken, Reports (inkl. versteckter *.html), .htaccess/.htpasswd pro *.conf entfernen
+conf_found=false
+shopt -s nullglob
+conf_list=("$SCRIPT_DIR"/*.conf)
+shopt -u nullglob
+
+for conf in "${conf_list[@]}"; do
+  [ -e "$conf" ] || continue
+  conf_found=true
+  KH_USER=""
+  STATS_DOMAIN=""
+  OUT_DIR=""
+  DB_BASE=""
+  conf_name="$(basename "$conf")"
+
+  if ! source "$conf" 2>/dev/null; then
+    step_fail "Konfiguration ${conf_name} einlesen." "Syntax- oder Lesefehler in ${conf_name}."
+    continue
+  fi
+  step_ok "Konfiguration ${conf_name} eingelesen."
+
+  if [ -z "$KH_USER" ]; then
+    step_fail "Benutzer-Datenbanken und Reports fuer ${conf_name} entfernen." "KH_USER ist in ${conf_name} leer."
+    continue
+  fi
+
+  db_target="${DB_BASE:-/var/lib/goaccess-db/${KH_USER}}"
+  if [ -d "$db_target" ]; then
+    if rm -rf "$db_target" 2>/dev/null; then
+      step_ok "GoAccess-Datenbank ${db_target} entfernt."
+    else
+      step_fail "GoAccess-Datenbank ${db_target} entfernen." "Verzeichnis konnte nicht geloescht werden."
+    fi
+  else
+    step_info "GoAccess-Datenbank ${db_target} uebersprungen." "Verzeichnis existiert nicht."
+  fi
+
+  out_target="${OUT_DIR:-/home/users/${KH_USER}/www/${STATS_DOMAIN}}"
+  if [ -z "$out_target" ] || [ "$out_target" = "/" ]; then
+    step_fail "Ausgabeverzeichnis fuer ${KH_USER} bereinigen." "Ungueltiges oder leeres Zielverzeichnis in ${conf_name}."
+  elif [ -d "$out_target" ]; then
+    shopt -s nullglob dotglob
+    html_artifacts=("$out_target"/*.html "$out_target"/.*.html)
+    shopt -u nullglob
+
+    rm_err=0
+    if [ "${#html_artifacts[@]}" -gt 0 ]; then
+      rm -rf "${html_artifacts[@]}" 2>/dev/null || rm_err=1
+    fi
+    rm -f "$out_target"/.htaccess "$out_target"/.htpasswd "$out_target"/gen-lang.php "$out_target"/login.php "$out_target"/log-view.php 2>/dev/null || rm_err=1
+
+    if [ "$rm_err" -eq 0 ]; then
+      step_ok "HTML-Reports (inkl. versteckter *.html), .htaccess und .htpasswd in ${out_target} entfernt."
+    else
+      step_fail "HTML-Reports, .htaccess und .htpasswd in ${out_target} entfernen." "Einige Artefakte in ${out_target} konnten nicht geloescht werden."
+    fi
+  else
+    step_info "Ausgabeverzeichnis ${out_target} uebersprungen." "Verzeichnis existiert nicht."
+  fi
+done
+
+if [ "$conf_found" = false ]; then
+  step_info "Benutzerspezifische Bereinigung uebersprungen." "Keine *.conf-Dateien in ${SCRIPT_DIR} gefunden."
+fi
+
+# 4. Basisverzeichnis /var/lib/goaccess-db (inkl. Lock- und Statusdateien), lokale *.conf und Skript-Log bereinigen
+if [ -d /var/lib/goaccess-db ]; then
+  if rm -rf /var/lib/goaccess-db 2>/dev/null; then
+    step_ok "Basisverzeichnis /var/lib/goaccess-db komplett entfernt."
+  else
+    step_fail "Basisverzeichnis /var/lib/goaccess-db entfernen." "Verzeichnis konnte nicht geloescht werden."
+  fi
+else
+  step_info "Basisverzeichnis /var/lib/goaccess-db uebersprungen." "Verzeichnis existiert nicht."
+fi
+
+shopt -s nullglob
+rem_conf_files=("$SCRIPT_DIR"/*.conf)
+shopt -u nullglob
+if [ "${#rem_conf_files[@]}" -gt 0 ]; then
+  if rm -f "${rem_conf_files[@]}" 2>/dev/null; then
+    step_ok "Lokale *.conf-Dateien (${#rem_conf_files[@]}) unter ${SCRIPT_DIR} entfernt."
+  else
+    step_fail "Lokale *.conf-Dateien unter ${SCRIPT_DIR} entfernen." "*.conf-Dateien konnten nicht geloescht werden."
+  fi
+else
+  step_info "Lokale *.conf-Bereinigung uebersprungen." "Keine *.conf-Dateien unter ${SCRIPT_DIR} vorhanden."
+fi
+
+log_file="${SCRIPT_DIR}/goaccess-update.log"
+if [ -e "$log_file" ]; then
+  if rm -f "$log_file" 2>/dev/null; then
+    step_ok "Logdatei ${log_file} entfernt."
+  else
+    step_fail "Logdatei ${log_file} entfernen." "Logdatei konnte nicht geloescht werden."
+  fi
+else
+  step_info "Logdatei ${log_file} uebersprungen." "Datei existiert nicht."
+fi
