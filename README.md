@@ -70,7 +70,6 @@ apt-get install -y goaccess geoip-database
 1. Log in to your **KeyHelp** panel.
 2. Go to **Domains -> Add Domain** (or **Subdomains -> Add Subdomain**) and create a dedicated subdomain for your analytics dashboard, for example `stats.example.com`, assigned to the target KeyHelp user (e.g. `exampleuser`).
 3. Enable **Let's Encrypt SSL** for `stats.example.com` so the dashboard and PHP session cookies work over HTTPS.
-4. Note the document root path of that subdomain (by default `/home/users/exampleuser/www/stats.example.com`).
 
 ### Step 3: Allow `/var/lib/goaccess-db` in PHP `open_basedir`
 
@@ -107,7 +106,7 @@ ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 
 ### Step 5: Run the Installer
 
-Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, and if no `*.conf` file exists yet, it prompts for your KeyHelp username and statistics domain and creates `<user>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`:
+Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, guides you interactively through user/domain setup, domain filters, login credentials, and generates the initial reports:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
@@ -120,39 +119,18 @@ The installer automatically:
 - Enables and generates the required UTF-8 locales in `/etc/locale.gen`.
 - Creates `/var/lib/goaccess-db/<user>` with permissions for `<user>:www-data`.
 - Installs `update-goaccess.sh` and `goaccess-lang-runner.sh` to `/usr/local/bin/`.
-- Copies `gen-lang.php`, `log-view.php`, and `login.php` into your statistics subdomain webroot (`OUT_DIR`).
+- Generates the initial HTML reports and sets up `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd` in your statistics webroot (`OUT_DIR`).
 - Installs and enables `goaccess-lang.path` and `goaccess-lang.service`.
 
-### Step 6: Adjust Configuration & Add Additional Users (Optional)
-
-Edit your generated `<user>.conf` in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/` to exclude domains (such as `mail.example.com` or `stats.example.com` itself) or change the default language:
-
-```bash
-nano /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/*.conf
-```
-
-Available options in `<user>.conf`:
-- `KH_USER` – KeyHelp username whose logs should be parsed.
-- `STATS_DOMAIN` – Subdomain serving the HTML reports.
-- `EXCLUDE_DOMAINS` – Space-separated list of domains to skip completely (no report generated).
-- `HIDE_NAV_DOMAINS` – Space-separated list of domains to generate reports for, but hide from the sidebar navigation.
-- `DEFAULT_LANG` – Initial fallback language (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`).
-
 > [!NOTE]
-> **Supporting Multiple KeyHelp Users:** Copy `goaccess.conf.example` to `<seconduser>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`, adjust `KH_USER` and `STATS_DOMAIN`, and re-run `./install` so directories and helper scripts are provisioned for that user as well.
+> **Supporting Multiple KeyHelp Users & Custom Document Root:** You can add additional users directly via the installer prompt or by copying `goaccess.conf.example` to `<seconduser>.conf` and re-running `./install`. By default, `OUT_DIR` is `/home/users/<KH_USER>/www/<STATS_DOMAIN>` – if your subdomain in KeyHelp uses a custom document root path, set `OUT_DIR` accordingly in `<user>.conf` and run `./install` again.
 
-### Step 7: Generate Initial Reports & Set Up a Cronjob
+### Step 6: Set Up a Cronjob & Verify Status
 
-Run the generator once manually to build the initial GoAccess database and HTML files:
+Check that `goaccess-lang.path` is active and reports were created:
 
 ```bash
-/usr/local/bin/update-goaccess.sh
 systemctl is-active goaccess-lang.path
-```
-
-Verify that HTML files were created in your statistics webroot:
-
-```bash
 ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
 ```
 
@@ -162,7 +140,7 @@ To keep your statistics up to date automatically, add a root cronjob (e.g. every
 */15 * * * * /usr/local/bin/update-goaccess.sh >/dev/null 2>&1
 ```
 
-### Step 8: Open & Use GoAccess in the Browser
+### Step 7: Open & Use GoAccess in the Browser
 
 1. Make sure you have an active session in your **KeyHelp** panel (so your browser holds a valid KeyHelp session cookie for CSRF-protected language switching).
 2. Open your statistics subdomain in the browser by navigating directly to one of your generated domain reports:
