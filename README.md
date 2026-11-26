@@ -1,28 +1,26 @@
 # KeyHelp GoAccess Multi-Language Dashboard
 
-A multi-language GoAccess web analytics dashboard and live language switcher for KeyHelp domains. It generates per-domain HTML reports with a searchable domain sidebar, persists GoAccess databases across runs (`--persist` / `--restore`), protects access via a custom PHP login gate (`login.php`) backed by `.htpasswd`, provides a live Log Viewer overlay (`log-view.php`), checks for updates against the Git branch under the sidebar buttons, and switches report languages on the fly via a `systemd` path/service watcher (`goaccess-lang.path` / `goaccess-lang.service`) and `gen-lang.php`.
+A multi-language GoAccess web analytics dashboard and live language switcher for KeyHelp domains. It generates per-domain HTML reports with a searchable domain sidebar, persists GoAccess databases across runs, and switches report languages on the fly via a `systemd` path/service watcher (`goaccess-lang.path` / `goaccess-lang.service`) and a session/CSRF-protected PHP endpoint (`gen-lang.php`).
 
 > [!IMPORTANT]
 >
 > **Requirements**
 >
-> - **Server:** Debian/Ubuntu Linux server with `root` SSH access, `systemd`, `bash`, `php` (with PHP-FPM for the target KeyHelp user), and `locale-gen`.
+> - **Server:** Debian/Ubuntu Linux server with `root` SSH access, `systemd`, `bash`, and `locale-gen`.
 > - **GoAccess:** `goaccess` installed on the system (see [Step 1](#step-1-install-goaccess-if-not-installed)).
 > - **KeyHelp:** A dedicated subdomain or domain in KeyHelp (e.g. `stats.example.com`) serving the generated HTML reports, plus `/var/lib/goaccess-db` added to PHP `open_basedir`.
-> - **Permissions:** Repository files under `/home/keyhelp/www/keyhelp/dashboard-layout` owned by `keyhelp:keyhelp`.
+> - **Permissions:** Repository files under `/home/keyhelp/www/keyhelp/dashboard-layout` are automatically set to `keyhelp:keyhelp` at the start of `./install`.
 
 ***
 
 ## Features
 
 - Automatically discovers all active domains with access logs under `/home/users/<KH_USER>/logs/` and generates individual HTML reports (`<domain>.html`).
-- Uses persistent GoAccess databases (`--db-path`, `--persist`, `--restore`, plus `DB_ONLY` support) so repeated cron runs do not duplicate historical data.
-- Injects a fixed, searchable domain navigation sidebar (`Domains (A–Z)`), a live language selector (`#custom-lang-select`), a **Log anzeigen / View Log** button, an **Abmelden / Logout** link (`/login.php?logout=1`), and a Git branch version check (`#custom-version-box` reading `VERSION` from `main` with a 6-hour `localStorage` cache, without requiring GitHub releases) into every generated report.
-- Provides a dark-themed Log Viewer overlay (`log-view.php`) reading the last 200 lines from `/var/lib/goaccess-db/goaccess-update.log` (hard-linked to `goaccess-update.log`) with fallback support, `Refresh`, `Close`, `ESC` handling, and automatic `DE`/`EN` labels.
-- Replaces Apache `AuthType Basic` with a session-based PHP login gate (`login.php`) verifying credentials against `.htpasswd` (`$apr1$` Apache MD5-Crypt, bcrypt `$2y$`/`$2a$`/`$2b$`, `{SHA}`), with CSRF protection, brute-force rate limiting (5 attempts -> 60s lockout), automatic `DE`/`EN` language detection (`Accept-Language`), and `.htaccess` protection for `.htaccess` and `.htpasswd`.
-- Supports 12 languages (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`) via UTF-8 system locales and stores the active language in `/var/lib/goaccess-db/.current_lang` so scheduled cron runs preserve the selected language.
-- Asynchronous report regeneration via `/var/lib/goaccess-db/.lang_request` and `goaccess-lang.path` with `flock` locking and a ring-based progress overlay in the browser.
-- Hardened `gen-lang.php` endpoint requiring an active session cookie, same-origin request headers, and a valid `X-CSRF-Token`.
+- Version check under sidebar buttons (`#custom-version-box` in `dashboard-inject.js`) comparing the local `VERSION` against the Git branch (`main`) with a 6-hour `localStorage` cache (no GitHub releases required).
+- Injects a fixed, searchable domain navigation sidebar (`Domains (A–Z)`) and a live language selector (`#custom-lang-select`) into every generated report, keeping the selected language synced across reloads.
+- Supports 12 languages (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`) via UTF-8 system locales and stores the active language in `/var/lib/goaccess-db/.current_lang` so scheduled cron runs keep your selected language.
+- Asynchronous report regeneration via `/var/lib/goaccess-db/.lang_request` and `goaccess-lang.path` with `flock` locking, a progress ring overlay, and a built-in log viewer (`log-view.php`).
+- Hardened `gen-lang.php` endpoint requiring an active KeyHelp session cookie, same-origin request headers, and a valid `X-CSRF-Token`.
 - Multi-user capable via separate `*.conf` files in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`.
 
 ***
@@ -32,20 +30,20 @@ A multi-language GoAccess web analytics dashboard and live language switcher for
 ```text
 dashboard-layout/goaccess/
 ├── README.md                    # Full installation and usage documentation
-├── VERSION                      # Current version string used for Git branch update checks
+├── VERSION                      # Current dashboard version used for Git branch update checks
 ├── .gitignore                   # Ignores local *.conf files while keeping *.conf.example
 ├── goaccess.conf.example        # Template for per-user configuration (<user>.conf)
-├── install.sh                   # Interactive installer (locales, dirs, hardlink, scripts, PHP endpoints, systemd)
-├── uninstall.sh                 # Removes systemd units, /usr/local/bin/ scripts, reports & /var/lib/goaccess-db
-├── update-goaccess.sh           # Generates persistent HTML reports across *.conf files, syncs log hardlink & injects UI
+├── install                      # Interactive installer (permissions, locales, dirs, scripts, systemd)
+├── uninstall                    # Removes systemd units, /usr/local/bin/ scripts and generated files
+├── update-goaccess.sh           # Generates HTML reports across *.conf files, mirrors logs & injects UI
 ├── goaccess-lang-runner.sh      # Systemd runner with flock locking and trigger cleanup
 ├── goaccess-lang.path           # Systemd path unit watching .lang_request
 ├── goaccess-lang.service        # Systemd oneshot service running update-goaccess.sh
-├── gen-lang.php                 # Session, same-origin & CSRF-protected language trigger endpoint
-├── login.php                    # Custom PHP login gate verifying against .htpasswd with brute-force & CSRF protection
-├── log-view.php                 # Authenticated JSON endpoint serving the last 200 log lines to the Log Viewer modal
+├── gen-lang.php                 # Session, same-origin & CSRF-protected trigger endpoint
+├── log-view.php                 # Session-protected log viewer endpoint for update logs
+├── login.php                    # Authentication gate for the statistics subdomain
 └── assets/
-    └── dashboard-inject.js      # Client-side sidebar search, language dropdown, progress overlay, log modal, version check & CSRF logic
+    └── dashboard-inject.js      # Client-side language dropdown, progress overlay & CSRF logic
 ```
 
 ***
@@ -71,16 +69,16 @@ apt-get install -y goaccess geoip-database
 
 1. Log in to your **KeyHelp** panel.
 2. Go to **Domains -> Add Domain** (or **Subdomains -> Add Subdomain**) and create a dedicated subdomain for your analytics dashboard, for example `stats.example.com`, assigned to the target KeyHelp user (e.g. `exampleuser`).
-3. Enable **Let's Encrypt SSL** for `stats.example.com` so the dashboard and PHP session cookies (`Secure` flag) work over HTTPS.
+3. Enable **Let's Encrypt SSL** for `stats.example.com` so the dashboard and PHP session cookies work over HTTPS.
 4. Note the document root path of that subdomain (by default `/home/users/exampleuser/www/stats.example.com`).
 
 ### Step 3: Allow `/var/lib/goaccess-db` in PHP `open_basedir`
 
-`gen-lang.php` writes `/var/lib/goaccess-db/.lang_request` for `systemd`, and `log-view.php` reads `/var/lib/goaccess-db/goaccess-update.log` (hard-linked to `goaccess-update.log` so PHP does not need traverse access into `/home/keyhelp` at `750`). PHP must be allowed to access `/var/lib/goaccess-db`:
+`gen-lang.php` writes the language trigger file `/var/lib/goaccess-db/.lang_request` so `systemd` can regenerate reports as `root`. PHP must be allowed to access `/var/lib/goaccess-db`:
 
 1. In **KeyHelp**, open **Users** and click **Edit** on the KeyHelp user that owns `stats.example.com`.
 2. Switch to the **PHP** tab.
-3. Locate the **`open_basedir`** field and append `:/var/lib/goaccess-db` (separated by a single colon `:`, without duplicate colons `::`) to the existing path list (e.g. `##DOCROOT##/www:##DOCROOT##/files:##DOCROOT##/tmp:/var/lib/goaccess-db`).
+3. Locate the **`open_basedir`** field and append `:/var/lib/goaccess-db` to the existing path list (e.g. `##DOCROOT##/www:##DOCROOT##/files:##DOCROOT##/tmp:/var/lib/goaccess-db`).
 4. Click **Save**.
 
 ### Step 4: Get the Files onto Your Server
@@ -101,45 +99,33 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git && git fetch origin && git checkout -t origin/main)
 ```
 
-Verify that all repository files (12 files + `VERSION` + `assets/`) are present:
+Verify that the files are present:
 
 ```bash
 ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ```
 
-### Step 5: Set Ownership and Permissions
+### Step 5: Run the Installer
 
-Set ownership to `keyhelp:keyhelp` on the repository directory, make the shell scripts executable, and restrict `.htpasswd` and `login.php` appropriately:
-
-```bash
-chown -R keyhelp:keyhelp /home/keyhelp/www/keyhelp/dashboard-layout
-chmod 755 /home/keyhelp/www/keyhelp/dashboard-layout /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-chmod +x /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/install.sh \
-         /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/uninstall.sh \
-         /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh \
-         /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh
-```
-
-### Step 6: Run the Installer
-
-Run `install.sh` as `root`. If no `*.conf` file exists yet, it prompts for your KeyHelp username and statistics domain and creates `<user>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`:
+Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, and if no `*.conf` file exists yet, it prompts for your KeyHelp username and statistics domain and creates `<user>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-./install.sh
+chmod +x install uninstall
+./install
 ```
 
 The installer automatically:
+- Sets `keyhelp:keyhelp` ownership on the GoAccess directory and marks scripts executable.
 - Enables and generates the required UTF-8 locales in `/etc/locale.gen`.
-- Creates `/var/lib/goaccess-db` and `/var/lib/goaccess-db/<user>` with permissions for `<user>:www-data`, and links `goaccess-update.log` to `/var/lib/goaccess-db/goaccess-update.log`.
+- Creates `/var/lib/goaccess-db/<user>` with permissions for `<user>:www-data`.
 - Installs `update-goaccess.sh` and `goaccess-lang-runner.sh` to `/usr/local/bin/`.
-- Copies `gen-lang.php`, `login.php`, and `log-view.php` into your statistics subdomain webroot (`OUT_DIR`), ensures `.htaccess` protects `.htaccess` and `.htpasswd`, and sets `chmod 640` on `.htpasswd` and `login.php` (if present).
+- Copies `gen-lang.php`, `log-view.php`, and `login.php` into your statistics subdomain webroot (`OUT_DIR`).
 - Installs and enables `goaccess-lang.path` and `goaccess-lang.service`.
 
-### Step 7: Configure `.htpasswd` & `<user>.conf` (and Additional Users)
+### Step 6: Adjust Configuration & Add Additional Users (Optional)
 
-1. Make sure an `.htpasswd` file exists in your statistics subdomain webroot (`OUT_DIR/.htpasswd`) with at least one user (`htpasswd -B` / `$apr1$` MD5-Crypt, bcrypt, or `{SHA}` are supported by `login.php`) and permissions `0640` (owned by `<user>:<webgroup>`).
-2. Edit your generated `<user>.conf` in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/` to exclude domains or adjust defaults:
+Edit your generated `<user>.conf` in `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/` to exclude domains (such as `mail.example.com` or `stats.example.com` itself) or change the default language:
 
 ```bash
 nano /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/*.conf
@@ -153,37 +139,36 @@ Available options in `<user>.conf`:
 - `DEFAULT_LANG` – Initial fallback language (`de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `pt`, `ru`, `sv`, `uk`, `zh`).
 
 > [!NOTE]
-> **Supporting Multiple KeyHelp Users:** Copy `goaccess.conf.example` to `<seconduser>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`, adjust `KH_USER` and `STATS_DOMAIN`, ensure `/var/lib/goaccess-db` is in that user's PHP `open_basedir`, and re-run `./install.sh`.
+> **Supporting Multiple KeyHelp Users:** Copy `goaccess.conf.example` to `<seconduser>.conf` inside `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/`, adjust `KH_USER` and `STATS_DOMAIN`, and re-run `./install` so directories and helper scripts are provisioned for that user as well.
 
-### Step 8: Generate Initial Reports & Set Up a Cronjob
+### Step 7: Generate Initial Reports & Set Up a Cronjob
 
-Run the generator once manually to build the persistent GoAccess database, link `goaccess-update.log`, and create the initial HTML files:
+Run the generator once manually to build the initial GoAccess database and HTML files:
 
 ```bash
 /usr/local/bin/update-goaccess.sh
 systemctl is-active goaccess-lang.path
 ```
 
-Verify that HTML files and PHP endpoints were created in your statistics webroot:
+Verify that HTML files were created in your statistics webroot:
 
 ```bash
-ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html /home/users/<KH_USER>/www/<STATS_DOMAIN>/login.php /home/users/<KH_USER>/www/<STATS_DOMAIN>/log-view.php /home/users/<KH_USER>/www/<STATS_DOMAIN>/gen-lang.php
+ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
 ```
 
-To keep your statistics up to date automatically without duplicating data (thanks to persistent GoAccess databases), add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
+To keep your statistics up to date automatically, add a root cronjob (e.g. every 15 minutes) via `crontab -e`:
 
 ```cron
 */15 * * * * /usr/local/bin/update-goaccess.sh >/dev/null 2>&1
 ```
 
-### Step 9: Open & Use GoAccess in the Browser
+### Step 8: Open & Use GoAccess in the Browser
 
-1. Open your statistics subdomain in the browser:
+1. Make sure you have an active session in your **KeyHelp** panel (so your browser holds a valid KeyHelp session cookie for CSRF-protected language switching).
+2. Open your statistics subdomain in the browser by navigating directly to one of your generated domain reports:
    `https://stats.example.com/<your-domain.tld>.html`
-2. Sign in via the custom PHP login page (`/login.php`) using a valid username and password from `.htpasswd` (automatically rendered in German for `de*` browsers or English otherwise).
-3. Use the **left sidebar** (`Domains (A–Z)`) and the search input (`Domain suchen...`) to switch between all analyzed domains while keeping the bottom action buttons pinned.
-4. Use the **language dropdown** in the top-right corner of the sidebar to switch the report language. A ring progress overlay appears while `systemd` regenerates all reports in the selected language, and the page reloads automatically once finished.
-5. Click **Log anzeigen / View Log** at the bottom of the sidebar to inspect the latest log lines in the modal overlay (with `Refresh`, `Close`, and `ESC` support), check the version status right below it, or click **Abmelden / Logout** (`/login.php?logout=1`) to end your session.
+3. Use the **left sidebar** (`Domains (A–Z)`) and the search input (`Domain suchen...`) to switch between all analyzed domains.
+4. Use the **language dropdown** in the top-right corner of the sidebar to switch the report language. A progress ring overlay appears while `systemd` regenerates all reports in the selected language, and the page reloads automatically once finished. You can also open the update log anytime via **Log anzeigen**.
 
 ***
 
@@ -191,18 +176,18 @@ To keep your statistics up to date automatically without duplicating data (thank
 
 ### Updating
 
-Pull the latest changes as `keyhelp` and re-run `install.sh` as `root` to update `/usr/local/bin/` scripts, PHP endpoints (`gen-lang.php`, `login.php`, `log-view.php`), the `/var/lib/goaccess-db/goaccess-update.log` hardlink, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
+Pull the latest changes as `keyhelp` and re-run `./install` as `root` to update `/usr/local/bin/` scripts, PHP endpoints, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
 
 ```bash
 su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess pull"
-cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install.sh
+cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install
 ```
 
 ### Uninstalling
 
-To stop and remove the `systemd` units, helper scripts under `/usr/local/bin/`, generated reports and web files (including `login.php`, `log-view.php`, `gen-lang.php`, `.htaccess`, and `.htpasswd`), local `*.conf` / `goaccess-update.log`, and the entire `/var/lib/goaccess-db` directory:
+To stop and remove the `systemd` units and helper scripts under `/usr/local/bin/`:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-./uninstall.sh
+./uninstall
 ```
