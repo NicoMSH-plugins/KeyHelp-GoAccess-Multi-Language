@@ -91,6 +91,7 @@ mkdir -p /home/keyhelp/www/keyhelp/dashboard-layout
 cd /home/keyhelp/www/keyhelp/dashboard-layout
 git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git goaccess
 cd goaccess
+chmod +x /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/install /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/uninstall
 ```
 
 If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` already exists, pull or check out into it:
@@ -105,6 +106,7 @@ else
   git fetch origin main
   git reset --hard origin/main
 fi
+chmod +x /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/install /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/uninstall
 ```
 
 Verify that the files are present:
