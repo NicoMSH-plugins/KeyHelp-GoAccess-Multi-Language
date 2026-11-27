@@ -443,6 +443,27 @@ run_step_cmd "2/6" "update-goaccess.sh kopieren" cp -f "$SCRIPT_DIR/update-goacc
 run_step_cmd "2/6" "goaccess-lang-runner.sh kopieren" cp -f "$SCRIPT_DIR/goaccess-lang-runner.sh" /usr/local/bin/goaccess-lang-runner.sh
 run_step_cmd "2/6" "Ausfuehrungsrechte unter /usr/local/bin setzen" chmod +x /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh
 
+MMDB_TARGET="/usr/share/GeoIP/GeoLite2-City.mmdb"
+MMDB_URL="https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+if [ ! -s "$MMDB_TARGET" ]; then
+  step "$(tr_txt "Lade GeoLite2-City Datenbank (ohne Registrierung)..." "Downloading GeoLite2-City database (no registration required)...")"
+  mkdir -p /usr/share/GeoIP
+  tmp_mmdb="${MMDB_TARGET}.tmp.$$"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --max-time 90 "$MMDB_URL" -o "$tmp_mmdb" || true
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q --timeout=90 -O "$tmp_mmdb" "$MMDB_URL" || true
+  fi
+  if [ -s "$tmp_mmdb" ] && [ "$(stat -c%s "$tmp_mmdb" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+    chmod 644 "$tmp_mmdb"
+    mv -f "$tmp_mmdb" "$MMDB_TARGET"
+    ok "$(tr_txt "GeoLite2-City.mmdb bereitgestellt." "GeoLite2-City.mmdb installed.")"
+  else
+    rm -f "$tmp_mmdb"
+    warn "$(tr_txt "GeoLite2-City.mmdb konnte aktuell nicht geladen werden (wird beim naechsten Update erneut versucht)." "Could not download GeoLite2-City.mmdb right now (will retry automatically on next update).")"
+  fi
+fi
+
 for CONF_FILE in "${CONF_FILES[@]}"; do
   [ -e "$CONF_FILE" ] || continue
   KH_USER=""

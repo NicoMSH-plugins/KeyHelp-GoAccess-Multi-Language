@@ -184,6 +184,10 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 <details>
 <summary>Show / Expand Changelog History</summary>
 
+### v1.0.5 (2026-11-27)
+
+- **Automatic GeoIP City Map (No Registration Required):** Automatically downloads and refreshes `GeoLite2-City.mmdb` under `/usr/share/GeoIP/GeoLite2-City.mmdb` (every 30 days via `update-goaccess.sh` and during `./install`) from a public mirror without requiring a MaxMind account, passing `--geoip-database` to GoAccess so the Geo Location world map and city markers render automatically.
+
 ### v1.0.4 (2026-11-27)
 
 - **Horizontal & Wide-View Layout Offset Fix:** Added dynamic sidebar offset calculation (`--ga-nav-offset` via `ResizeObserver` and viewport resize listener in `dashboard-inject.js`) with horizontal overflow handling so wide GoAccess report columns and panels are no longer clipped on the left.

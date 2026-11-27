@@ -60,7 +60,41 @@ export LANGUAGE="$ACTIVE_LANG"
 echo "Sprache: ${TARGET_LANG} (${ACTIVE_LOCALE})"
 
 GEOIP_OPT=""
-MMDB=$(find /usr/share /var/lib -name "*.mmdb" 2>/dev/null | head -n 1)
+MMDB_TARGET="/usr/share/GeoIP/GeoLite2-City.mmdb"
+MMDB_URL="https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+
+ensure_geoip_mmdb() {
+  local need_dl=0
+  if [ ! -s "$MMDB_TARGET" ]; then
+    need_dl=1
+  elif [ -n "$(find "$MMDB_TARGET" -maxdepth 0 -mtime +30 2>/dev/null)" ]; then
+    need_dl=1
+  fi
+
+  if [ "$need_dl" -eq 1 ]; then
+    mkdir -p /usr/share/GeoIP 2>/dev/null || true
+    local tmp_mmdb="${MMDB_TARGET}.tmp.$$"
+    local dl_ok=0
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL --max-time 60 "$MMDB_URL" -o "$tmp_mmdb" 2>/dev/null && dl_ok=1
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q --timeout=60 -O "$tmp_mmdb" "$MMDB_URL" 2>/dev/null && dl_ok=1
+    fi
+    if [ "$dl_ok" -eq 1 ] && [ -s "$tmp_mmdb" ] && [ "$(stat -c%s "$tmp_mmdb" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+      chmod 644 "$tmp_mmdb" 2>/dev/null || true
+      mv -f "$tmp_mmdb" "$MMDB_TARGET" 2>/dev/null || true
+    else
+      rm -f "$tmp_mmdb" 2>/dev/null || true
+    fi
+  fi
+}
+
+ensure_geoip_mmdb
+if [ -s "$MMDB_TARGET" ]; then
+  MMDB="$MMDB_TARGET"
+else
+  MMDB=$(find /usr/share /var/lib -name "*.mmdb" 2>/dev/null | head -n 1)
+fi
 [ -n "$MMDB" ] && GEOIP_OPT="--geoip-database=$MMDB"
 
 AVAIL_LANGS=()
