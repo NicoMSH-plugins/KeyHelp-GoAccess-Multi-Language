@@ -79,23 +79,44 @@ if [ -f "$UPD_FILE" ]; then
     log_upd "GeoLite2-City.mmdb bereits vorhanden"
   fi
 
-  if ! /usr/local/bin/goaccess --version 2>/dev/null | grep -q "1\.9\.4"; then
-    log_upd "GoAccess != 1.9.4 – starte nicht-interaktiven Build..."
-    write_runner_progress 60 "GoAccess 1.9.4..." 0 1 true "0.0"
+  GA_TARGET_VER="1.12"
+  GA_CUR_VER=$(/usr/local/bin/goaccess --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "0.0.0")
+  GA_MAJOR=$(printf '%s' "$GA_CUR_VER" | cut -d. -f1)
+  GA_MINOR=$(printf '%s' "$GA_CUR_VER" | cut -d. -f2)
+  GA_OK=0
+  if { [ "${GA_MAJOR:-0}" -gt 1 ] || { [ "${GA_MAJOR:-0}" -eq 1 ] && [ "${GA_MINOR:-0}" -ge 12 ]; }; } && /usr/local/bin/goaccess --version 2>/dev/null | grep -q -- '--enable-geoip=mmdb'; then
+    GA_OK=1
+  fi
+
+  if [ "$GA_OK" -eq 0 ]; then
+    log_upd "GoAccess (${GA_CUR_VER}) < ${GA_TARGET_VER} – starte nicht-interaktiven Build..."
+    write_runner_progress 60 "GoAccess ${GA_TARGET_VER}..." 0 1 true "0.0"
     (
       export DEBIAN_FRONTEND=noninteractive
-      apt-get update -qq >/dev/null 2>&1 || true
-      apt-get install -y -qq build-essential libncursesw5-dev libgeoip-dev libmaxminddb-dev libssl-dev zlib1g-dev curl tar >/dev/null 2>&1 || true
+      if dpkg-query -W -f='${Status}' goaccess 2>/dev/null | grep -q "install ok installed"; then
+        apt-get purge -y -qq goaccess >/dev/null 2>&1 || true
+      fi
+      MISSING_PKGS=""
+      for _pkg in build-essential libncursesw5-dev libmaxminddb-dev libssl-dev curl tar; do
+        if ! dpkg-query -W -f='${Status}' "$_pkg" 2>/dev/null | grep -q "install ok installed"; then
+          MISSING_PKGS="$MISSING_PKGS $_pkg"
+        fi
+      done
+      if [ -n "$MISSING_PKGS" ]; then
+        apt-get update -qq >/dev/null 2>&1 || true
+        # shellcheck disable=SC2086
+        apt-get install -y -qq $MISSING_PKGS >/dev/null 2>&1 || true
+      fi
       tmp_build=$(mktemp -d /tmp/goaccess-build.XXXXXX)
-      if curl -fsSL --max-time 120 "https://tar.goaccess.io/goaccess-1.9.4.tar.gz" -o "${tmp_build}/goaccess-1.9.4.tar.gz" 2>/dev/null; then
-        tar -xzf "${tmp_build}/goaccess-1.9.4.tar.gz" -C "${tmp_build}" 2>/dev/null
-        cd "${tmp_build}/goaccess-1.9.4" && ./configure --enable-utf8 --enable-geoip=mmdb >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 && make install >/dev/null 2>&1
+      if curl -fsSL --max-time 120 "https://tar.goaccess.io/goaccess-${GA_TARGET_VER}.tar.gz" -o "${tmp_build}/goaccess-${GA_TARGET_VER}.tar.gz" 2>/dev/null; then
+        tar -xzf "${tmp_build}/goaccess-${GA_TARGET_VER}.tar.gz" -C "${tmp_build}" 2>/dev/null
+        cd "${tmp_build}/goaccess-${GA_TARGET_VER}" && ./configure --enable-utf8 --enable-geoip=mmdb --with-openssl >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 && make install >/dev/null 2>&1
       fi
       rm -rf "${tmp_build}"
     ) || true
     log_upd "GoAccess Build abgeschlossen: $(/usr/local/bin/goaccess --version 2>/dev/null | head -n 1)"
   else
-    log_upd "GoAccess 1.9.4 bereits installiert – Build uebersprungen"
+    log_upd "GoAccess ${GA_CUR_VER} (>= ${GA_TARGET_VER}) bereits installiert – Build uebersprungen"
   fi
 
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang.path /etc/systemd/system/goaccess-lang.path 2>/dev/null || true

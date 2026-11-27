@@ -146,7 +146,7 @@ ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
 
 ### Updating
 
-Updates can be triggered directly from the **Update** button in the bottom-left sidebar of your statistics dashboard whenever a new release is available. The background runner automatically pulls the latest changes from `main`, updates scripts, PHP endpoints, `systemd` units, GeoIP data, and GoAccess `1.9.4` if needed, rebuilds all reports, and logs every step in the Log Viewer (local `*.conf` files remain untouched).
+Updates can be triggered directly from the **Update** button in the bottom-left sidebar of your statistics dashboard whenever a new release is available. The background runner automatically pulls the latest changes from `main`, updates scripts, PHP endpoints, `systemd` units, GeoIP data, and GoAccess `1.12` if needed, rebuilds all reports, and logs every step in the Log Viewer (local `*.conf` files remain untouched).
 
 ### Uninstalling
 
@@ -180,5 +180,10 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 - **Granular Update Logging:** Expanded `log_msg` output in `update-goaccess.sh` so domain runs, log counts, and status entries appear completely in `goaccess-update.log` and the Log Viewer.
 - **Auto-Update Step Logging:** Added detailed `[AUTO-UPDATE]` step logging (Git pull with commit hash, file sync, GeoIP check, GoAccess binary check, and user log synchronization) in `goaccess-lang-runner.sh` so automated UI updates remain fully visible in the Log Viewer.
 - **Automated Runner Upgrades:** Extended `goaccess-lang-runner.sh` to sync `/usr/local/bin/VERSION`, ensure `GeoLite2-City.mmdb` is present, restart `goaccess-lang.path`, and non-interactively build GoAccess `1.9.4` when needed.
+
+### v1.0.7 (2026-11-27)
+
+- **GoAccess 1.12 Source Build:** Updated `install` and `goaccess-lang-runner.sh` to build and upgrade GoAccess to `1.12` with `--enable-utf8`, `--enable-geoip=mmdb`, and `--with-openssl` (removing older apt-packaged `goaccess` installations automatically).
+- **Complete Uninstall Cleanup:** Extended `uninstall` to also remove `/usr/local/etc/goaccess` left behind by source builds.
 
 </details>

@@ -217,3 +217,13 @@ if [ -x /usr/local/bin/goaccess ] || [ -e /usr/local/bin/goaccess ]; then
 else
   step_info "/usr/local/bin/goaccess uebersprungen." "Binary existiert nicht."
 fi
+
+if [ -d /usr/local/etc/goaccess ]; then
+  if rm -rf /usr/local/etc/goaccess 2>/dev/null; then
+    step_ok "/usr/local/etc/goaccess entfernt."
+  else
+    step_fail "/usr/local/etc/goaccess entfernen." "Verzeichnis konnte nicht geloescht werden."
+  fi
+else
+  step_info "/usr/local/etc/goaccess uebersprungen." "Verzeichnis existiert nicht."
+fi

@@ -290,7 +290,7 @@ ok "$(tr_txt "Locales fertig." "Locales generated.")"
 sleep 3
 clear
 
-step "$(tr_txt "[2/7] Pruefe GoAccess Version (mind. 1.9 mit GeoIP/MaxMind DB fuer Weltkarte)..." "[2/7] Checking GoAccess version (1.9+ with GeoIP/MaxMind DB for world map)...")"
+step "$(tr_txt "[2/7] Pruefe GoAccess Version (mind. 1.12 mit GeoIP/MaxMind DB fuer Weltkarte)..." "[2/7] Checking GoAccess version (1.12+ with GeoIP/MaxMind DB for world map)...")"
 GA_VER=$(goaccess --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "0.0.0")
 GA_MAJOR=$(printf '%s' "$GA_VER" | cut -d. -f1)
 GA_MINOR=$(printf '%s' "$GA_VER" | cut -d. -f2)
@@ -299,13 +299,32 @@ if goaccess --version 2>/dev/null | grep -q -- '--enable-geoip=mmdb'; then
   GA_HAS_MMDB=1
 fi
 
-if [ "${GA_MAJOR:-0}" -gt 1 ] || { [ "${GA_MAJOR:-0}" -eq 1 ] && [ "${GA_MINOR:-0}" -ge 9 ]; } && [ "$GA_HAS_MMDB" -eq 1 ]; then
-  ok "$(tr_txt "GoAccess ${GA_VER} (mit MaxMind DB) ist bereits installiert." "GoAccess ${GA_VER} (with MaxMind DB) is already installed.")"
+GA_IS_CURRENT=0
+if [ "${GA_MAJOR:-0}" -gt 1 ] || { [ "${GA_MAJOR:-0}" -eq 1 ] && [ "${GA_MINOR:-0}" -ge 12 ]; }; then
+  GA_IS_CURRENT=1
+fi
+
+if [ "$GA_IS_CURRENT" -eq 1 ] && [ "$GA_HAS_MMDB" -eq 1 ]; then
+  ok "$(tr_txt "GoAccess ${GA_VER} (mit MaxMind DB) ist bereits installiert – uebersprungen." "GoAccess ${GA_VER} (with MaxMind DB) is already installed - skipped.")"
 else
-  GA_TARGET_VER="1.9.4"
+  GA_TARGET_VER="1.12"
   echo -e "  ${C_DIM}$(tr_txt "Aktuell: ${GA_VER} -> Installiere GoAccess ${GA_TARGET_VER} mit GeoIP-Unterstuetzung..." "Current: ${GA_VER} -> Building GoAccess ${GA_TARGET_VER} with GeoIP support...")${C_RESET}"
-  run_step_cmd "2/7" "apt-get update" apt-get update -qq
-  run_step_cmd "2/7" "Build-Abhaengigkeiten installieren" apt-get install -y -qq build-essential libmaxminddb-dev libncursesw5-dev libssl-dev wget tar
+  if dpkg-query -W -f='${Status}' goaccess 2>/dev/null | grep -q "install ok installed"; then
+    run_step_cmd "2/7" "Altes APT-Paket goaccess entfernen" apt-get purge -y -qq goaccess
+  fi
+  MISSING_PKGS=""
+  for _pkg in build-essential libmaxminddb-dev libncursesw5-dev libssl-dev wget tar; do
+    if ! dpkg-query -W -f='${Status}' "$_pkg" 2>/dev/null | grep -q "install ok installed"; then
+      MISSING_PKGS="$MISSING_PKGS $_pkg"
+    fi
+  done
+  if [ -n "$MISSING_PKGS" ]; then
+    run_step_cmd "2/7" "apt-get update" apt-get update -qq
+    # shellcheck disable=SC2086
+    run_step_cmd "2/7" "Fehlende Build-Abhaengigkeiten installieren" apt-get install -y -qq $MISSING_PKGS
+  else
+    ok "$(tr_txt "Build-Abhaengigkeiten bereits vorhanden – uebersprungen." "Build dependencies already present - skipped.")"
+  fi
   GA_BUILD_DIR=$(mktemp -d /tmp/goaccess-build.XXXXXX)
   run_step_cmd "2/7" "GoAccess ${GA_TARGET_VER} herunterladen" wget -q -O "${GA_BUILD_DIR}/goaccess.tar.gz" "https://tar.goaccess.io/goaccess-${GA_TARGET_VER}.tar.gz"
   run_step_cmd "2/7" "GoAccess Archiv entpacken" tar -xzf "${GA_BUILD_DIR}/goaccess.tar.gz" -C "${GA_BUILD_DIR}"
