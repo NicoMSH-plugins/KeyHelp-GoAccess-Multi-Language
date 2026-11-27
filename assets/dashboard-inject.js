@@ -234,6 +234,54 @@
   }, true);
 })();
 
+(function fixGoAccessLayout() {
+  if (document.getElementById('custom-ga-layout-fix')) return;
+
+  const style = document.createElement('style');
+  style.id = 'custom-ga-layout-fix';
+  style.textContent = `
+    @media (min-width: 992px) {
+      body > .container-fluid {
+        width: auto !important;
+        max-width: calc(100vw - var(--ga-nav-offset, 0px)) !important;
+        margin-left: var(--ga-nav-offset, 0px) !important;
+        overflow-x: auto !important;
+        box-sizing: border-box !important;
+        transition: margin-left 0.15s ease;
+      }
+      body > .container-fluid .row,
+      body > .container-fluid [class*="col-"] {
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+      body > .container-fluid .col-md-12 {
+        float: none !important;
+        width: 100% !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  function syncNavOffset() {
+    const nav = document.querySelector('body > nav');
+    if (!nav) return;
+    const rect = nav.getBoundingClientRect();
+    const isVisible = rect.width > 0 && rect.height > 0 && getComputedStyle(nav).display !== 'none';
+    const offset = isVisible ? Math.round(rect.right) : 0;
+    document.documentElement.style.setProperty('--ga-nav-offset', offset + 'px');
+  }
+
+  syncNavOffset();
+  window.addEventListener('resize', syncNavOffset);
+  if (typeof ResizeObserver !== 'undefined') {
+    const nav = document.querySelector('body > nav');
+    if (nav) {
+      const ro = new ResizeObserver(syncNavOffset);
+      ro.observe(nav);
+    }
+  }
+})();
+
 (function initVersionCheck() {
   const box = document.getElementById('custom-version-box');
   if (!box) return;
@@ -389,7 +437,6 @@ function waitForRunnerFinish(sub, maxWaitMs) {
         updBtn.id = 'custom-update-btn';
         updBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:7px 10px;border-radius:8px;background:rgba(56,189,248,0.16);border:1px solid rgba(56,189,248,0.45);color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;';
         updBtn.textContent = btnText;
-        const updBtn = document.getElementById('custom-update-btn');
       if (updBtn) updBtn.addEventListener('click', () => triggerSelfUpdate(updBtn, cleanRemote));
 
         box.appendChild(verLabel);
