@@ -88,7 +88,8 @@ If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` does not exist yet:
 
 ```bash
 mkdir -p /home/keyhelp/www/keyhelp/dashboard-layout
-git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
+cd /home/keyhelp/www/keyhelp/dashboard-layout
+git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git goaccess
 ```
 
 If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` already exists, pull or check out into it:
