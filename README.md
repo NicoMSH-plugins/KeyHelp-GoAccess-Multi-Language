@@ -176,3 +176,17 @@ To stop and remove the `systemd` units, cronjob, helper scripts under `/usr/loca
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ./uninstall
 ```
+
+***
+
+## Changelog
+
+<details>
+<summary>Show / Expand Changelog History</summary>
+
+### v1.0.4 (2026-11-27)
+
+- **Horizontal & Wide-View Layout Offset Fix:** Added dynamic sidebar offset calculation (`--ga-nav-offset` via `ResizeObserver` and viewport resize listener in `dashboard-inject.js`) with horizontal overflow handling so wide GoAccess report columns and panels are no longer clipped on the left.
+- **Restored Sidebar Self-Update Button:** Removed a duplicate `const updBtn` declaration in `dashboard-inject.js` that prevented the injected script block from executing and rendering the update trigger button.
+
+</details>
