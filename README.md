@@ -2,6 +2,8 @@
 
 A multi-language GoAccess web analytics dashboard and live language switcher for KeyHelp domains. It generates per-domain HTML reports with a searchable domain sidebar, persists GoAccess databases across runs, and switches report languages on the fly via a `systemd` path/service watcher (`goaccess-lang.path` / `goaccess-lang.service`) and a session/CSRF-protected PHP endpoint (`gen-lang.php`).
 
+<img width="1913" height="898" alt="Screenshot 2026-11-27 140616" src="https://github.com/user-attachments/assets/a79d2438-d39a-458d-a76d-ebd3627cecb2" />
+
 > [!IMPORTANT]
 >
 > **Requirements**
