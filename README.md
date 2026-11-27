@@ -50,28 +50,13 @@ dashboard-layout/goaccess/
 
 ## Step-by-Step Installation
 
-### Step 1: Install GoAccess (if not installed)
-
-Connect to your server via SSH as `root` and check whether `goaccess` is already installed:
-
-```bash
-command -v goaccess && goaccess --version
-```
-
-If GoAccess is not installed yet, install it (along with the optional GeoIP database for country/city lookups):
-
-```bash
-apt-get update
-apt-get install -y goaccess geoip-database
-```
-
-### Step 2: Create a Statistics Subdomain in KeyHelp
+### Step 1: Create a Statistics Subdomain in KeyHelp
 
 1. Log in to your **KeyHelp** panel.
 2. Go to **Domains -> Add Domain** (or **Subdomains -> Add Subdomain**) and create a dedicated subdomain for your analytics dashboard, for example `stats.example.com`, assigned to the target KeyHelp user (e.g. `exampleuser`).
 3. Enable **Let's Encrypt SSL** for `stats.example.com` so the dashboard and PHP session cookies work over HTTPS.
 
-### Step 3: Allow `/var/lib/goaccess-db` in PHP `open_basedir`
+### Step 2: Allow `/var/lib/goaccess-db` in PHP `open_basedir`
 
 `gen-lang.php` writes the language trigger file `/var/lib/goaccess-db/.lang_request` so `systemd` can regenerate reports as `root`. PHP must be allowed to access `/var/lib/goaccess-db`:
 
@@ -80,7 +65,7 @@ apt-get install -y goaccess geoip-database
 3. Locate the **`open_basedir`** field and append `:/var/lib/goaccess-db` to the existing path list (e.g. `##DOCROOT##/www:##DOCROOT##/files:##DOCROOT##/tmp:/var/lib/goaccess-db`).
 4. Click **Save**.
 
-### Step 4: Get the Files onto Your Server
+### Step 3: Get the Files onto Your Server
 
 Clone or pull `https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language` into `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess`:
 
@@ -115,7 +100,7 @@ Verify that the files are present:
 ls -la /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 ```
 
-### Step 5: Run the Installer
+### Step 4: Run the Installer
 
 Run `./install` as `root`. It sets directory ownership to `keyhelp:keyhelp` right at startup, guides you interactively through user/domain setup, domain filters, cron interval, and login credentials, and generates the initial reports:
 
@@ -137,7 +122,7 @@ The installer automatically:
 > [!NOTE]
 > **Supporting Multiple KeyHelp Users & Custom Document Root:** You can add additional users directly via the installer prompt when re-running `./install`. By default, `OUT_DIR` is `/home/users/<KH_USER>/www/<STATS_DOMAIN>` – if your subdomain in KeyHelp uses a custom document root path, update `OUT_DIR` in `<user>.conf` and run `./install` again.
 
-### Step 6: Verify Status & Generated Reports
+### Step 5: Verify Status & Generated Reports
 
 Check that `goaccess-lang.path`, the root cronjob, and the generated HTML reports are in place:
 
@@ -147,7 +132,7 @@ crontab -l | grep update-goaccess.sh
 ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
 ```
 
-### Step 7: Open & Use GoAccess in the Browser
+### Step 6: Open & Use GoAccess in the Browser
 
 1. Make sure you have an active session in your **KeyHelp** panel (so your browser holds a valid KeyHelp session cookie for CSRF-protected language switching).
 2. Open your statistics subdomain in the browser by navigating directly to one of your generated domain reports:
