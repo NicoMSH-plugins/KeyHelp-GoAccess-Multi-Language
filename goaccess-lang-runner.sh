@@ -24,8 +24,19 @@ write_runner_progress() {
 
 UPD_FILE="${DB_BASE}/.update_request"
 if [ -f "$UPD_FILE" ]; then
+  UPD_LOG="/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-update.log"
+  [ -f "$UPD_LOG" ] || UPD_LOG="${DB_BASE}/nicoweb/goaccess-update.log"
+  log_upd() {
+    printf '[%s] [AUTO-UPDATE] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$UPD_LOG" 2>/dev/null || true
+  }
+  log_upd "Starte automatisches Update (Trigger: ${UPD_FILE})"
   write_runner_progress 15 "Git Pull..." 0 1 true "0.0"
-  su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >/dev/null 2>&1 || true
+  if su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >>"$UPD_LOG" 2>&1; then
+    NEW_COMMIT=$(git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess log -n 1 --oneline 2>/dev/null || echo "unbekannt")
+    log_upd "Git Pull erfolgreich: ${NEW_COMMIT}"
+  else
+    log_upd "WARNUNG: Git Pull fehlgeschlagen"
+  fi
   write_runner_progress 45 "Sync..." 0 1 true "0.0"
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh /usr/local/bin/update-goaccess.sh 2>/dev/null || true
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh /usr/local/bin/goaccess-lang-runner.sh 2>/dev/null || true
@@ -39,16 +50,27 @@ if [ -f "$UPD_FILE" ]; then
     [ -f /home/users/nicoweb/www/stats.uaena.info/login.php ] && chmod 0640 /home/users/nicoweb/www/stats.uaena.info/login.php 2>/dev/null || true
   fi
   [ -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/VERSION ] && cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/VERSION /usr/local/bin/VERSION 2>/dev/null || true
+  NEW_VER=$(cat /usr/local/bin/VERSION 2>/dev/null || echo "unbekannt")
+  log_upd "Dateien & VERSION (${NEW_VER}) synchronisiert"
 
   if [ ! -s /usr/share/GeoIP/GeoLite2-City.mmdb ]; then
+    log_upd "GeoLite2-City.mmdb fehlt – starte Download..."
     mkdir -p /usr/share/GeoIP 2>/dev/null || true
-    curl -fsSL --max-time 90 "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" -o /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ 2>/dev/null \
+    if curl -fsSL --max-time 90 "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" -o /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ 2>/dev/null \
       && [ -s /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ ] \
       && chmod 644 /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ \
-      && mv -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ /usr/share/GeoIP/GeoLite2-City.mmdb || rm -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$
+      && mv -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ /usr/share/GeoIP/GeoLite2-City.mmdb; then
+      log_upd "GeoLite2-City.mmdb erfolgreich installiert"
+    else
+      rm -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$
+      log_upd "WARNUNG: GeoLite2-City.mmdb Download fehlgeschlagen"
+    fi
+  else
+    log_upd "GeoLite2-City.mmdb bereits vorhanden"
   fi
 
   if ! /usr/local/bin/goaccess --version 2>/dev/null | grep -q "1\.9\.4"; then
+    log_upd "GoAccess != 1.9.4 – starte nicht-interaktiven Build..."
     write_runner_progress 60 "GoAccess 1.9.4..." 0 1 true "0.0"
     (
       export DEBIAN_FRONTEND=noninteractive
@@ -61,14 +83,19 @@ if [ -f "$UPD_FILE" ]; then
       fi
       rm -rf "${tmp_build}"
     ) || true
+    log_upd "GoAccess Build abgeschlossen: $(/usr/local/bin/goaccess --version 2>/dev/null | head -n 1)"
+  else
+    log_upd "GoAccess 1.9.4 bereits installiert – Build uebersprungen"
   fi
 
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang.path /etc/systemd/system/goaccess-lang.path 2>/dev/null || true
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang.service /etc/systemd/system/goaccess-lang.service 2>/dev/null || true
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl restart goaccess-lang.path >/dev/null 2>&1 || true
+  log_upd "Systemd-Units aktualisiert – starte Report-Rebuild..."
   write_runner_progress 75 "Rebuild..." 0 1 true "0.0"
   /usr/local/bin/update-goaccess.sh >/dev/null 2>&1 || true
+  log_upd "Automatisches Update komplett abgeschlossen"
   write_runner_progress 100 "Fertig" 1 1 false "0.0"
   rm -f "$UPD_FILE"
   exit 0
