@@ -90,13 +90,21 @@ If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` does not exist yet:
 mkdir -p /home/keyhelp/www/keyhelp/dashboard-layout
 cd /home/keyhelp/www/keyhelp/dashboard-layout
 git clone https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git goaccess
+cd goaccess
 ```
 
 If `/home/keyhelp/www/keyhelp/dashboard-layout/goaccess` already exists, pull or check out into it:
 
 ```bash
 cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
-git pull || (git init && git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git && git fetch origin && git checkout -t origin/main)
+if [ -d .git ]; then
+  git pull --ff-only origin main
+else
+  git init -b main
+  git remote add origin https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language.git
+  git fetch origin main
+  git reset --hard origin/main
+fi
 ```
 
 Verify that the files are present:
