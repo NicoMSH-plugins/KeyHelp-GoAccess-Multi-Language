@@ -24,19 +24,29 @@ write_runner_progress() {
 
 UPD_FILE="${DB_BASE}/.update_request"
 if [ -f "$UPD_FILE" ]; then
-  UPD_LOG="/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-update.log"
-  [ -f "$UPD_LOG" ] || UPD_LOG="${DB_BASE}/nicoweb/goaccess-update.log"
+  REPO_LOG="/home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-update.log"
+  USER_LOG="${DB_BASE}/nicoweb/goaccess-update.log"
+  mkdir -p "$(dirname "$USER_LOG")" 2>/dev/null || true
+  UPD_TMP=$(mktemp /tmp/goaccess-autoupdate.XXXXXX)
+
   log_upd() {
-    printf '[%s] [AUTO-UPDATE] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$UPD_LOG" 2>/dev/null || true
+    local line
+    line=$(printf '[%s] [AUTO-UPDATE] %s' "$(date '+%Y-%m-%d %H:%M:%S')" "$1")
+    printf '%s\n' "$line" >> "$UPD_TMP"
+    printf '%s\n' "$line" >> "$REPO_LOG" 2>/dev/null || true
+    printf '%s\n' "$line" >> "$USER_LOG" 2>/dev/null || true
+    chown nicoweb:nicoweb "$USER_LOG" 2>/dev/null || true
   }
+
   log_upd "Starte automatisches Update (Trigger: ${UPD_FILE})"
   write_runner_progress 15 "Git Pull..." 0 1 true "0.0"
-  if su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >>"$UPD_LOG" 2>&1; then
+  if su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >>"$UPD_TMP" 2>&1; then
     NEW_COMMIT=$(git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess log -n 1 --oneline 2>/dev/null || echo "unbekannt")
     log_upd "Git Pull erfolgreich: ${NEW_COMMIT}"
   else
     log_upd "WARNUNG: Git Pull fehlgeschlagen"
   fi
+
   write_runner_progress 45 "Sync..." 0 1 true "0.0"
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh /usr/local/bin/update-goaccess.sh 2>/dev/null || true
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh /usr/local/bin/goaccess-lang-runner.sh 2>/dev/null || true
@@ -93,9 +103,21 @@ if [ -f "$UPD_FILE" ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl restart goaccess-lang.path >/dev/null 2>&1 || true
   log_upd "Systemd-Units aktualisiert – starte Report-Rebuild..."
+
   write_runner_progress 75 "Rebuild..." 0 1 true "0.0"
   /usr/local/bin/update-goaccess.sh >/dev/null 2>&1 || true
-  log_upd "Automatisches Update komplett abgeschlossen"
+
+  # update-goaccess.sh leert REPO_LOG zu Beginn; Auto-Update-Summary wieder anhaengen & ins User-Log syncen
+  {
+    printf '\n'
+    cat "$UPD_TMP"
+    printf '[%s] [AUTO-UPDATE] Automatisches Update komplett abgeschlossen\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  } >> "$REPO_LOG" 2>/dev/null || true
+  cp -f "$REPO_LOG" "$USER_LOG" 2>/dev/null || true
+  chown nicoweb:nicoweb "$USER_LOG" 2>/dev/null || true
+  chmod 0644 "$USER_LOG" 2>/dev/null || true
+  rm -f "$UPD_TMP"
+
   write_runner_progress 100 "Fertig" 1 1 false "0.0"
   rm -f "$UPD_FILE"
   exit 0
