@@ -198,6 +198,7 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 - **Non-Interactive Install & Cleanup:** Updated `install` and `uninstall` for reliable, non-interactive execution including full cleanup of `/usr/local/bin/goaccess` and `/usr/share/GeoIP/GeoLite2-City.mmdb`.
 - **Layout & Sidebar Alignment:** Refined offset handling in `assets/dashboard-inject.js` across the custom domain sidebar, navigation icon bar, and main report container.
 - **Granular Update Logging:** Expanded `log_msg` output in `update-goaccess.sh` so domain runs, log counts, and status entries appear completely in `goaccess-update.log` and the Log Viewer.
+- **Auto-Update Step Logging:** Added detailed `[AUTO-UPDATE]` step logging (Git pull with commit hash, file sync, GeoIP check, GoAccess binary check, and user log synchronization) in `goaccess-lang-runner.sh` so automated UI updates remain fully visible in the Log Viewer.
 - **Automated Runner Upgrades:** Extended `goaccess-lang-runner.sh` to sync `/usr/local/bin/VERSION`, ensure `GeoLite2-City.mmdb` is present, restart `goaccess-lang.path`, and non-interactively build GoAccess `1.9.4` when needed.
 
 </details>
