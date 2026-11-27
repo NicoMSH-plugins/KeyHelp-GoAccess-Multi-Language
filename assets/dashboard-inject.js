@@ -243,7 +243,7 @@
   const repoUrl = 'https://github.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language';
   const rawUrl = 'https://raw.githubusercontent.com/NicoMSH-plugins/KeyHelp-GoAccess-Multi-Language/main/VERSION';
   const cacheKey = 'ga_git_version_cache_v1';
-  const ttlMs = 6 * 60 * 60 * 1000;
+  const ttlMs = 5 * 60 * 1000;
 
   function parseVer(v) {
     return String(v || '0.0.0')
