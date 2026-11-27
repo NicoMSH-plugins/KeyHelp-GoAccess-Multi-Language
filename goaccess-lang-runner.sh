@@ -41,7 +41,7 @@ if [ -f "$UPD_FILE" ]; then
   log_upd "Starte automatisches Update (Trigger: ${UPD_FILE})"
   write_runner_progress 15 "Git Pull..." 0 1 true "0.0"
   if su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >>"$UPD_TMP" 2>&1; then
-    NEW_COMMIT=$(git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess log -n 1 --oneline 2>/dev/null || echo "unbekannt")
+    NEW_COMMIT=$(su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess log -n 1 --oneline" 2>/dev/null || echo "unbekannt")
     log_upd "Git Pull erfolgreich: ${NEW_COMMIT}"
   else
     log_upd "WARNUNG: Git Pull fehlgeschlagen"
