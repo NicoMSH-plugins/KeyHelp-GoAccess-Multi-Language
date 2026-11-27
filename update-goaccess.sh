@@ -356,35 +356,71 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
 
       body {
         margin-left: 0 !important;
+        overflow-x: hidden !important;
       }
-      body > .container {
-        margin-left: 265px !important;
-        width: calc(100% - 265px) !important;
-        max-width: none !important;
+      @media (min-width: 992px) {
+        html body > .container-fluid,
+        body > .container-fluid {
+          position: relative !important;
+          left: 0 !important;
+          right: auto !important;
+          transform: none !important;
+          float: none !important;
+          margin-left: var(--ga-nav-offset, 265px) !important;
+          margin-right: 0 !important;
+          width: calc(100vw - var(--ga-nav-offset, 265px)) !important;
+          max-width: calc(100vw - var(--ga-nav-offset, 265px)) !important;
+          padding-left: 18px !important;
+          padding-right: 18px !important;
+          box-sizing: border-box !important;
+        }
+      }
+      body > .container .row,
+      body > .container [class*="col-"] {
+        max-width: 100% !important;
+        min-width: 0 !important;
       }
       body > nav {
         left: 205px !important;
+        margin-left: 0 !important;
+        padding-left: 0 !important;
         width: 60px !important;
+        min-width: 60px !important;
+        max-width: 60px !important;
         z-index: 95 !important;
+        box-sizing: border-box !important;
       }
       body > nav.active {
         left: 205px !important;
         width: 260px !important;
+        min-width: 260px !important;
+        max-width: 260px !important;
         z-index: 97 !important;
       }
       body > nav:not(.active) .nav-list > * {
         display: none !important;
       }
-      nav .nav-bars,
-      nav .nav-gears,
+      .nav-bars,
+      nav .nav-gears {
+        position: fixed !important;
+        left: 205px !important;
+        right: auto !important;
+        width: 60px !important;
+        transform: none !important;
+        z-index: 98 !important;
+      }
       nav .nav-ws-status {
-        left: 218px !important;
+        left: 243px !important;
+        right: auto !important;
+        transform: none !important;
         z-index: 98 !important;
       }
       body > nav.active .nav-bars {
-        left: 218px !important;
+        left: 215px !important;
         right: auto !important;
+        width: auto !important;
         top: 16px !important;
+        transform: none !important;
       }
       body > nav.active .nav-gears,
       body > nav.active .nav-ws-status {
@@ -646,7 +682,10 @@ ${INJECT_JS}
       updateGenRing(0, 0);
     </script>"
 
-    log_msg "Domain: ${dom} (${#logs[@]} Logdateien)"
+    log_msg "Domain: ${dom} (${#logs[@]} Logdateien, DB_ONLY=${DB_ONLY:-0})"
+    if [ "${#logs[@]}" -eq 0 ] && [ "${DB_ONLY:-0}" != "1" ]; then
+      log_msg "  INFO: Keine neuen Logdateien fuer ${dom}; aktualisiere Report aus DB."
+    fi
     tmp_html=$(mktemp "${OUT_DIR}/.${dom}.XXXXXX.html")
     if [ "${DB_ONLY:-0}" = "1" ]; then
       if [ -t 1 ]; then

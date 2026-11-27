@@ -38,9 +38,35 @@ if [ -f "$UPD_FILE" ]; then
     [ -f /home/users/nicoweb/www/stats.uaena.info/.htpasswd ] && chmod 0640 /home/users/nicoweb/www/stats.uaena.info/.htpasswd 2>/dev/null || true
     [ -f /home/users/nicoweb/www/stats.uaena.info/login.php ] && chmod 0640 /home/users/nicoweb/www/stats.uaena.info/login.php 2>/dev/null || true
   fi
+  [ -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/VERSION ] && cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/VERSION /usr/local/bin/VERSION 2>/dev/null || true
+
+  if [ ! -s /usr/share/GeoIP/GeoLite2-City.mmdb ]; then
+    mkdir -p /usr/share/GeoIP 2>/dev/null || true
+    curl -fsSL --max-time 90 "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" -o /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ 2>/dev/null \
+      && [ -s /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ ] \
+      && chmod 644 /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ \
+      && mv -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$ /usr/share/GeoIP/GeoLite2-City.mmdb || rm -f /usr/share/GeoIP/GeoLite2-City.mmdb.tmp.$$
+  fi
+
+  if ! /usr/local/bin/goaccess --version 2>/dev/null | grep -q "1\.9\.4"; then
+    write_runner_progress 60 "GoAccess 1.9.4..." 0 1 true "0.0"
+    (
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq >/dev/null 2>&1 || true
+      apt-get install -y -qq build-essential libncursesw5-dev libgeoip-dev libmaxminddb-dev libssl-dev zlib1g-dev curl tar >/dev/null 2>&1 || true
+      tmp_build=$(mktemp -d /tmp/goaccess-build.XXXXXX)
+      if curl -fsSL --max-time 120 "https://tar.goaccess.io/goaccess-1.9.4.tar.gz" -o "${tmp_build}/goaccess-1.9.4.tar.gz" 2>/dev/null; then
+        tar -xzf "${tmp_build}/goaccess-1.9.4.tar.gz" -C "${tmp_build}" 2>/dev/null
+        cd "${tmp_build}/goaccess-1.9.4" && ./configure --enable-utf8 --enable-geoip=mmdb >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 && make install >/dev/null 2>&1
+      fi
+      rm -rf "${tmp_build}"
+    ) || true
+  fi
+
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang.path /etc/systemd/system/goaccess-lang.path 2>/dev/null || true
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang.service /etc/systemd/system/goaccess-lang.service 2>/dev/null || true
   systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl restart goaccess-lang.path >/dev/null 2>&1 || true
   write_runner_progress 75 "Rebuild..." 0 1 true "0.0"
   /usr/local/bin/update-goaccess.sh >/dev/null 2>&1 || true
   write_runner_progress 100 "Fertig" 1 1 false "0.0"

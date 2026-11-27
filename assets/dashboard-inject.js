@@ -243,18 +243,20 @@
     @media (min-width: 992px) {
       body > .container-fluid {
         width: auto !important;
-        max-width: calc(100vw - var(--ga-nav-offset, 0px)) !important;
-        margin-left: var(--ga-nav-offset, 0px) !important;
+        max-width: calc(100vw - var(--ga-nav-offset, 265px)) !important;
+        margin-left: var(--ga-nav-offset, 265px) !important;
+        padding-left: 18px !important;
+        padding-right: 18px !important;
         overflow-x: auto !important;
         box-sizing: border-box !important;
-        transition: margin-left 0.15s ease;
+        transition: margin-left 0.15s ease, max-width 0.15s ease;
       }
       body > .container-fluid .row,
       body > .container-fluid [class*="col-"] {
         max-width: 100% !important;
         min-width: 0 !important;
       }
-      body > .container-fluid .col-md-12 {
+      body > .container .col-md-12 {
         float: none !important;
         width: 100% !important;
       }
@@ -263,11 +265,19 @@
   document.head.appendChild(style);
 
   function syncNavOffset() {
+    if (window.innerWidth < 992) {
+      document.documentElement.style.setProperty('--ga-nav-offset', '0px');
+      return;
+    }
+    const baseOffset = 265;
     const nav = document.querySelector('body > nav');
-    if (!nav) return;
+    if (!nav) {
+      document.documentElement.style.setProperty('--ga-nav-offset', baseOffset + 'px');
+      return;
+    }
     const rect = nav.getBoundingClientRect();
-    const isVisible = rect.width > 0 && rect.height > 0 && getComputedStyle(nav).display !== 'none';
-    const offset = isVisible ? Math.round(rect.right) : 0;
+    const rightPos = rect.width > 0 ? Math.round(rect.right) : baseOffset;
+    const offset = Math.max(baseOffset, rightPos);
     document.documentElement.style.setProperty('--ga-nav-offset', offset + 'px');
   }
 

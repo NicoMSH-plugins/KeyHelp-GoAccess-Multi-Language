@@ -281,18 +281,51 @@ shopt -u nullglob
 sleep 2
 clear
 
-step "$(tr_txt "[1/6] Aktiviere und generiere UTF-8 Locales (kann je nach System kurz dauern)..." "[1/6] Enabling and generating UTF-8 locales (this may take a moment)...")"
+step "$(tr_txt "[1/7] Aktiviere und generiere UTF-8 Locales (kann je nach System kurz dauern)..." "[1/7] Enabling and generating UTF-8 locales (this may take a moment)...")"
 for loc in de_DE.UTF-8 en_US.UTF-8 es_ES.UTF-8 fr_FR.UTF-8 it_IT.UTF-8 ja_JP.UTF-8 ko_KR.UTF-8 pt_BR.UTF-8 ru_RU.UTF-8 sv_SE.UTF-8 uk_UA.UTF-8 zh_CN.UTF-8; do
-  run_step_cmd "1/6" "locale.gen anpassen fuer ${loc}" sed -i "s/^# *${loc} UTF-8/${loc} UTF-8/" /etc/locale.gen
+  run_step_cmd "1/7" "locale.gen anpassen fuer ${loc}" sed -i "s/^# *${loc} UTF-8/${loc} UTF-8/" /etc/locale.gen
 done
-run_step_cmd "1/6" "locale-gen" locale-gen
+run_step_cmd "1/7" "locale-gen" locale-gen
 ok "$(tr_txt "Locales fertig." "Locales generated.")"
+sleep 3
+clear
+
+step "$(tr_txt "[2/7] Pruefe GoAccess Version (mind. 1.9 mit GeoIP/MaxMind DB fuer Weltkarte)..." "[2/7] Checking GoAccess version (1.9+ with GeoIP/MaxMind DB for world map)...")"
+GA_VER=$(goaccess --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "0.0.0")
+GA_MAJOR=$(printf '%s' "$GA_VER" | cut -d. -f1)
+GA_MINOR=$(printf '%s' "$GA_VER" | cut -d. -f2)
+GA_HAS_MMDB=0
+if goaccess --version 2>/dev/null | grep -q -- '--enable-geoip=mmdb'; then
+  GA_HAS_MMDB=1
+fi
+
+if [ "${GA_MAJOR:-0}" -gt 1 ] || { [ "${GA_MAJOR:-0}" -eq 1 ] && [ "${GA_MINOR:-0}" -ge 9 ]; } && [ "$GA_HAS_MMDB" -eq 1 ]; then
+  ok "$(tr_txt "GoAccess ${GA_VER} (mit MaxMind DB) ist bereits installiert." "GoAccess ${GA_VER} (with MaxMind DB) is already installed.")"
+else
+  GA_TARGET_VER="1.9.4"
+  echo -e "  ${C_DIM}$(tr_txt "Aktuell: ${GA_VER} -> Installiere GoAccess ${GA_TARGET_VER} mit GeoIP-Unterstuetzung..." "Current: ${GA_VER} -> Building GoAccess ${GA_TARGET_VER} with GeoIP support...")${C_RESET}"
+  run_step_cmd "2/7" "apt-get update" apt-get update -qq
+  run_step_cmd "2/7" "Build-Abhaengigkeiten installieren" apt-get install -y -qq build-essential libmaxminddb-dev libncursesw5-dev libssl-dev wget tar
+  GA_BUILD_DIR=$(mktemp -d /tmp/goaccess-build.XXXXXX)
+  run_step_cmd "2/7" "GoAccess ${GA_TARGET_VER} herunterladen" wget -q -O "${GA_BUILD_DIR}/goaccess.tar.gz" "https://tar.goaccess.io/goaccess-${GA_TARGET_VER}.tar.gz"
+  run_step_cmd "2/7" "GoAccess Archiv entpacken" tar -xzf "${GA_BUILD_DIR}/goaccess.tar.gz" -C "${GA_BUILD_DIR}"
+  (
+    cd "${GA_BUILD_DIR}/goaccess-${GA_TARGET_VER}" || exit 1
+    ./configure --enable-utf8 --enable-geoip=mmdb --with-openssl >/dev/null
+    make -j"$(nproc)" >/dev/null
+    make install >/dev/null
+  ) || { rm -rf "${GA_BUILD_DIR}"; die_step "2/7" "Kompilieren von GoAccess ${GA_TARGET_VER} fehlgeschlagen" 1; }
+  rm -rf "${GA_BUILD_DIR}"
+  hash -r
+  NEW_GA_VER=$(/usr/local/bin/goaccess --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' || echo "$GA_TARGET_VER")
+  ok "$(tr_txt "GoAccess ${NEW_GA_VER} (inkl. MaxMind DB & Weltkarte) erfolgreich installiert." "GoAccess ${NEW_GA_VER} (including MaxMind DB & world map) installed successfully.")"
+fi
 sleep 3
 clear
 
 show_filter_step_header() {
   local kh_user="$1"
-  step "$(tr_txt "[2/6] Richte Datenbank-Verzeichnisse und Skripte unter /usr/local/bin ein..." "[2/6] Setting up database directories and scripts in /usr/local/bin...")"
+  step "$(tr_txt "[3/7] Richte Datenbank-Verzeichnisse und Skripte unter /usr/local/bin ein..." "[3/7] Setting up database directories and scripts in /usr/local/bin...")"
   echo ""
   echo -e "${C_BOLD}  $(tr_txt "Domain-Filter fuer ${kh_user}:" "Domain filters for ${kh_user}:")${C_RESET}"
 }
@@ -371,8 +404,8 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
   DEFAULT_LANG="${UI_LANG}"
   # shellcheck disable=SC1090
   source "$CONF_FILE"
-  [ -n "$KH_USER" ] || die_step "2/6" "KH_USER fehlt in ${CONF_FILE}" 1
-  [ -n "$STATS_DOMAIN" ] || die_step "2/6" "STATS_DOMAIN fehlt in ${CONF_FILE}" 1
+  [ -n "$KH_USER" ] || die_step "3/7" "KH_USER fehlt in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "3/7" "STATS_DOMAIN fehlt in ${CONF_FILE}" 1
 
   OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
   DB_BASE="/var/lib/goaccess-db/${KH_USER}"
@@ -431,17 +464,20 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
     printf 'EXCLUDE_DOMAINS="%s"\n' "$NEW_EXCL"
     printf 'HIDE_NAV_DOMAINS="%s"\n' "$NEW_HIDE"
     printf 'DEFAULT_LANG="%s"\n' "${DEFAULT_LANG:-${UI_LANG}}"
-  } > "$CONF_FILE" || die_step "2/6" "Konnte ${CONF_FILE} nicht aktualisieren" "$?"
+  } > "$CONF_FILE" || die_step "3/7" "Konnte ${CONF_FILE} nicht aktualisieren" "$?"
   chown keyhelp:keyhelp "$CONF_FILE" 2>/dev/null || true
   ok "$(tr_txt "Domain-Filter in ${CONF_FILE} gespeichert (Exclude: '${NEW_EXCL:-none}' | Hide Nav: '${NEW_HIDE:-none}')." "Saved domain filters in ${CONF_FILE} (Exclude: '${NEW_EXCL:-none}' | Hide Nav: '${NEW_HIDE:-none}').")"
 done
 
-run_step_cmd "2/6" "Verzeichnis /var/lib/goaccess-db anlegen" mkdir -p /var/lib/goaccess-db
-run_step_cmd "2/6" "Rechte fuer /var/lib/goaccess-db setzen" chmod 1777 /var/lib/goaccess-db
+run_step_cmd "3/7" "Verzeichnis /var/lib/goaccess-db anlegen" mkdir -p /var/lib/goaccess-db
+run_step_cmd "3/7" "Rechte fuer /var/lib/goaccess-db setzen" chmod 1777 /var/lib/goaccess-db
 
-run_step_cmd "2/6" "update-goaccess.sh kopieren" cp -f "$SCRIPT_DIR/update-goaccess.sh" /usr/local/bin/update-goaccess.sh
-run_step_cmd "2/6" "goaccess-lang-runner.sh kopieren" cp -f "$SCRIPT_DIR/goaccess-lang-runner.sh" /usr/local/bin/goaccess-lang-runner.sh
-run_step_cmd "2/6" "Ausfuehrungsrechte unter /usr/local/bin setzen" chmod +x /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh
+run_step_cmd "3/7" "update-goaccess.sh kopieren" cp -f "$SCRIPT_DIR/update-goaccess.sh" /usr/local/bin/update-goaccess.sh
+run_step_cmd "3/7" "goaccess-lang-runner.sh kopieren" cp -f "$SCRIPT_DIR/goaccess-lang-runner.sh" /usr/local/bin/goaccess-lang-runner.sh
+run_step_cmd "3/7" "Ausfuehrungsrechte unter /usr/local/bin setzen" chmod +x /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh
+if [ -f "$SCRIPT_DIR/VERSION" ]; then
+  run_step_cmd "3/7" "VERSION nach /usr/local/bin/VERSION kopieren" cp -f "$SCRIPT_DIR/VERSION" /usr/local/bin/VERSION
+fi
 
 MMDB_TARGET="/usr/share/GeoIP/GeoLite2-City.mmdb"
 MMDB_URL="https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
@@ -472,39 +508,39 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
   DB_BASE=""
   # shellcheck disable=SC1090
   source "$CONF_FILE"
-  [ -n "$KH_USER" ] || die_step "2/6" "KH_USER leer in ${CONF_FILE}" 1
-  [ -n "$STATS_DOMAIN" ] || die_step "2/6" "STATS_DOMAIN leer in ${CONF_FILE}" 1
+  [ -n "$KH_USER" ] || die_step "3/7" "KH_USER leer in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "3/7" "STATS_DOMAIN leer in ${CONF_FILE}" 1
 
   OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
   DB_BASE="/var/lib/goaccess-db/${KH_USER}"
 
-  run_step_cmd "2/6" "Verzeichnisse fuer ${KH_USER} anlegen" mkdir -p "$DB_BASE" "$OUT_DIR"
-  run_step_cmd "2/6" "Eigentuemer fuer ${DB_BASE} setzen" chown -R "${KH_USER}:www-data" "$DB_BASE"
-  run_step_cmd "2/6" "Rechte fuer ${DB_BASE} setzen" chmod 770 "$DB_BASE"
+  run_step_cmd "3/7" "Verzeichnisse fuer ${KH_USER} anlegen" mkdir -p "$DB_BASE" "$OUT_DIR"
+  run_step_cmd "3/7" "Eigentuemer fuer ${DB_BASE} setzen" chown -R "${KH_USER}:www-data" "$DB_BASE"
+  run_step_cmd "3/7" "Rechte fuer ${DB_BASE} setzen" chmod 770 "$DB_BASE"
 
-  run_step_cmd "2/6" "gen-lang.php kopieren" cp -f "$SCRIPT_DIR/gen-lang.php" "${OUT_DIR}/gen-lang.php"
-  run_step_cmd "2/6" "Eigentuemer fuer gen-lang.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/gen-lang.php"
+  run_step_cmd "3/7" "gen-lang.php kopieren" cp -f "$SCRIPT_DIR/gen-lang.php" "${OUT_DIR}/gen-lang.php"
+  run_step_cmd "3/7" "Eigentuemer fuer gen-lang.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/gen-lang.php"
   ok "$(tr_txt "Eingerichtet fuer ${KH_USER} -> ${OUT_DIR}" "Configured for ${KH_USER} -> ${OUT_DIR}")"
 done
 sleep 3
 clear
 
-step "$(tr_txt "[3/6] Installiere und starte systemd Units..." "[3/6] Installing and starting systemd units...")"
-run_step_cmd "3/6" "goaccess-lang.path kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.path" /etc/systemd/system/goaccess-lang.path
-run_step_cmd "3/6" "goaccess-lang.service kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.service" /etc/systemd/system/goaccess-lang.service
-run_step_cmd "3/6" "systemctl daemon-reload" systemctl daemon-reload
-run_step_cmd "3/6" "goaccess-lang.path aktivieren" systemctl enable --now goaccess-lang.path
+step "$(tr_txt "[4/7] Installiere und starte systemd Units..." "[4/7] Installing and starting systemd units...")"
+run_step_cmd "4/7" "goaccess-lang.path kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.path" /etc/systemd/system/goaccess-lang.path
+run_step_cmd "4/7" "goaccess-lang.service kopieren" cp -f "$SCRIPT_DIR/goaccess-lang.service" /etc/systemd/system/goaccess-lang.service
+run_step_cmd "4/7" "systemctl daemon-reload" systemctl daemon-reload
+run_step_cmd "4/7" "goaccess-lang.path aktivieren" systemctl enable --now goaccess-lang.path
 ok "$(tr_txt "systemd Units aktiv." "systemd units enabled.")"
 sleep 3
 clear
 
-step "$(tr_txt "[4/6] Erzeuge initiale GoAccess-Reports (inkl. .gz-Archiven)..." "[4/6] Generating initial GoAccess reports (including .gz archives)...")"
-run_step_cmd "4/6" "update-goaccess.sh ausfuehren" /usr/local/bin/update-goaccess.sh
+step "$(tr_txt "[5/7] Erzeuge initiale GoAccess-Reports (inkl. .gz-Archiven)..." "[5/7] Generating initial GoAccess reports (including .gz archives)...")"
+run_step_cmd "5/7" "update-goaccess.sh ausfuehren" /usr/local/bin/update-goaccess.sh
 ok "$(tr_txt "HTML-Reports erfolgreich erstellt." "HTML reports generated successfully.")"
 sleep 3
 clear
 
-step "$(tr_txt "[5/6] Cronjob fuer automatische Aktualisierung einrichten..." "[5/6] Setting up cronjob for automatic updates...")"
+step "$(tr_txt "[6/7] Cronjob fuer automatische Aktualisierung einrichten..." "[6/7] Setting up cronjob for automatic updates...")"
 CRON_CMD="/usr/local/bin/update-goaccess.sh >/dev/null 2>&1"
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
@@ -539,7 +575,7 @@ if printf '%s\n' "$EXISTING_CRON" | grep -Fq "/usr/local/bin/update-goaccess.sh"
       {
         [ -n "$FILTERED_CRON" ] && printf '%s\n' "$FILTERED_CRON"
         printf '%s\n' "$CRON_LINE"
-      } | crontab - || die_step "5/6" "Konnte Crontab nicht aktualisieren" "$?"
+      } | crontab - || die_step "6/7" "Konnte Crontab nicht aktualisieren" "$?"
       ok "$(tr_txt "Cronjob aktualisiert: ${CRON_LINE}" "Cronjob updated: ${CRON_LINE}")"
       ;;
   esac
@@ -557,13 +593,13 @@ else
   {
     [ -n "$EXISTING_CRON" ] && printf '%s\n' "$EXISTING_CRON"
     printf '%s\n' "$CRON_LINE"
-  } | crontab - || die_step "5/6" "Konnte Crontab nicht aktualisieren" "$?"
+  } | crontab - || die_step "6/7" "Konnte Crontab nicht aktualisieren" "$?"
   ok "$(tr_txt "Cronjob eingetragen: ${CRON_LINE}" "Cronjob added: ${CRON_LINE}")"
 fi
 sleep 3
 clear
 
-step "$(tr_txt "[6/6] Richte Passwortschutz (.htaccess) und Login-Seite ein..." "[6/6] Setting up password protection (.htaccess) and login page...")"
+step "$(tr_txt "[7/7] Richte Passwortschutz (.htaccess) und Login-Seite ein..." "[7/7] Setting up password protection (.htaccess) and login page...")"
 for CONF_FILE in "${CONF_FILES[@]}"; do
   [ -e "$CONF_FILE" ] || continue
   KH_USER=""
@@ -571,8 +607,8 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
   OUT_DIR=""
   # shellcheck disable=SC1090
   source "$CONF_FILE"
-  [ -n "$KH_USER" ] || die_step "6/6" "KH_USER leer in ${CONF_FILE}" 1
-  [ -n "$STATS_DOMAIN" ] || die_step "6/6" "STATS_DOMAIN leer in ${CONF_FILE}" 1
+  [ -n "$KH_USER" ] || die_step "7/7" "KH_USER leer in ${CONF_FILE}" 1
+  [ -n "$STATS_DOMAIN" ] || die_step "7/7" "STATS_DOMAIN leer in ${CONF_FILE}" 1
   OUT_DIR="/home/users/${KH_USER}/www/${STATS_DOMAIN}"
 
   echo ""
@@ -591,25 +627,25 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
   done
 
   if command -v htpasswd >/dev/null 2>&1; then
-    run_step_cmd "6/6" ".htpasswd erstellen" htpasswd -bc "${OUT_DIR}/.htpasswd" "$HT_USER" "$HT_PASS"
+    run_step_cmd "7/7" ".htpasswd erstellen" htpasswd -bc "${OUT_DIR}/.htpasswd" "$HT_USER" "$HT_PASS"
   else
-    HT_HASH=$(openssl passwd -apr1 "$HT_PASS") || die_step "6/6" "openssl passwd fehlgeschlagen" "$?"
-    printf "%s:%s\n" "$HT_USER" "$HT_HASH" > "${OUT_DIR}/.htpasswd" || die_step "6/6" ".htpasswd schreiben fehlgeschlagen" "$?"
+    HT_HASH=$(openssl passwd -apr1 "$HT_PASS") || die_step "7/7" "openssl passwd fehlgeschlagen" "$?"
+    printf "%s:%s\n" "$HT_USER" "$HT_HASH" > "${OUT_DIR}/.htpasswd" || die_step "7/7" ".htpasswd schreiben fehlgeschlagen" "$?"
   fi
 
   if [ -f "${SCRIPT_DIR}/login.php" ]; then
-    run_step_cmd "6/6" "login.php kopieren" cp -f "${SCRIPT_DIR}/login.php" "${OUT_DIR}/login.php"
+    run_step_cmd "7/7" "login.php kopieren" cp -f "${SCRIPT_DIR}/login.php" "${OUT_DIR}/login.php"
   fi
-  run_step_cmd "6/6" "/var/lib/goaccess-db sicherstellen" mkdir -p /var/lib/goaccess-db
-  run_step_cmd "6/6" "Logdatei anlegen" touch "${SCRIPT_DIR}/goaccess-update.log"
+  run_step_cmd "7/7" "/var/lib/goaccess-db sicherstellen" mkdir -p /var/lib/goaccess-db
+  run_step_cmd "7/7" "Logdatei anlegen" touch "${SCRIPT_DIR}/goaccess-update.log"
   ln -sf "${SCRIPT_DIR}/goaccess-update.log" /var/lib/goaccess-db/goaccess-update.log 2>/dev/null || true
   if [ -f "${SCRIPT_DIR}/log-view.php" ]; then
-    run_step_cmd "6/6" "log-view.php kopieren" cp -f "${SCRIPT_DIR}/log-view.php" "${OUT_DIR}/log-view.php"
-    run_step_cmd "6/6" "Rechte fuer log-view.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/log-view.php"
-    run_step_cmd "6/6" "Modus fuer log-view.php setzen" chmod 640 "${OUT_DIR}/log-view.php"
+    run_step_cmd "7/7" "log-view.php kopieren" cp -f "${SCRIPT_DIR}/log-view.php" "${OUT_DIR}/log-view.php"
+    run_step_cmd "7/7" "Rechte fuer log-view.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/log-view.php"
+    run_step_cmd "7/7" "Modus fuer log-view.php setzen" chmod 640 "${OUT_DIR}/log-view.php"
   fi
 
-  cat <<'HTEOF' > "${OUT_DIR}/.htaccess" || die_step "6/6" ".htaccess schreiben fehlgeschlagen" "$?"
+  cat <<'HTEOF' > "${OUT_DIR}/.htaccess" || die_step "7/7" ".htaccess schreiben fehlgeschlagen" "$?"
 <FilesMatch "^(\.htaccess|\.htpasswd)$">
   Require all denied
 </FilesMatch>
@@ -620,10 +656,10 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
   RewriteRule ^(.*)$ /login.php?_gate=1&_target=$1 [L,QSA]
 </IfModule>
 HTEOF
-  run_step_cmd "6/6" "Rechte fuer .htaccess und .htpasswd setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/.htaccess" "${OUT_DIR}/.htpasswd"
-  [ -f "${OUT_DIR}/login.php" ] && run_step_cmd "6/6" "Rechte fuer login.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/login.php" && run_step_cmd "6/6" "Modus fuer login.php setzen" chmod 640 "${OUT_DIR}/login.php"
-  run_step_cmd "6/6" "Modus fuer .htpasswd setzen" chmod 640 "${OUT_DIR}/.htpasswd"
-  run_step_cmd "6/6" "Modus fuer .htaccess setzen" chmod 644 "${OUT_DIR}/.htaccess"
+  run_step_cmd "7/7" "Rechte fuer .htaccess und .htpasswd setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/.htaccess" "${OUT_DIR}/.htpasswd"
+  [ -f "${OUT_DIR}/login.php" ] && run_step_cmd "7/7" "Rechte fuer login.php setzen" chown "${KH_USER}:${KH_USER}" "${OUT_DIR}/login.php" && run_step_cmd "7/7" "Modus fuer login.php setzen" chmod 640 "${OUT_DIR}/login.php"
+  run_step_cmd "7/7" "Modus fuer .htpasswd setzen" chmod 640 "${OUT_DIR}/.htpasswd"
+  run_step_cmd "7/7" "Modus fuer .htaccess setzen" chmod 644 "${OUT_DIR}/.htaccess"
   ok "$(tr_txt "Login-Seite (login.php), .htaccess und .htpasswd fuer ${STATS_DOMAIN} angelegt." "Created login page (login.php), .htaccess and .htpasswd for ${STATS_DOMAIN}.")"
 
   echo -e "${C_GREEN}${C_BOLD}  >>> $(tr_txt "Statistiken fuer ${KH_USER} sind jetzt verfuegbar unter: https://${STATS_DOMAIN}/" "Statistics for ${KH_USER} are now available at: https://${STATS_DOMAIN}/")${C_RESET}"

@@ -196,3 +196,24 @@ if [ -e "$log_file" ]; then
 else
   step_info "Logdatei ${log_file} uebersprungen." "Datei existiert nicht."
 fi
+
+# 5. GeoLite2-City.mmdb und selbst gebautes /usr/local/bin/goaccess entfernen
+if [ -f /usr/share/GeoIP/GeoLite2-City.mmdb ]; then
+  if rm -f /usr/share/GeoIP/GeoLite2-City.mmdb 2>/dev/null; then
+    step_ok "GeoLite2-City.mmdb entfernt."
+  else
+    step_fail "GeoLite2-City.mmdb entfernen." "Datei konnte nicht geloescht werden."
+  fi
+else
+  step_info "GeoLite2-City.mmdb uebersprungen." "Datei existiert nicht."
+fi
+
+if [ -x /usr/local/bin/goaccess ] || [ -e /usr/local/bin/goaccess ]; then
+  if rm -f /usr/local/bin/goaccess 2>/dev/null; then
+    step_ok "/usr/local/bin/goaccess entfernt."
+  else
+    step_fail "/usr/local/bin/goaccess entfernen." "Binary konnte nicht geloescht werden."
+  fi
+else
+  step_info "/usr/local/bin/goaccess uebersprungen." "Binary existiert nicht."
+fi

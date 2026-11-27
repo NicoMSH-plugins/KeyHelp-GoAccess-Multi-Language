@@ -184,13 +184,20 @@ cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess
 <details>
 <summary>Show / Expand Changelog History</summary>
 
-### v1.0.5 (2026-11-27)
-
-- **Automatic GeoIP City Map (No Registration Required):** Automatically downloads and refreshes `GeoLite2-City.mmdb` under `/usr/share/GeoIP/GeoLite2-City.mmdb` (every 30 days via `update-goaccess.sh` and during `./install`) from a public mirror without requiring a MaxMind account, passing `--geoip-database` to GoAccess so the Geo Location world map and city markers render automatically.
-
 ### v1.0.4 (2026-11-27)
 
 - **Horizontal & Wide-View Layout Offset Fix:** Added dynamic sidebar offset calculation (`--ga-nav-offset` via `ResizeObserver` and viewport resize listener in `dashboard-inject.js`) with horizontal overflow handling so wide GoAccess report columns and panels are no longer clipped on the left.
 - **Restored Sidebar Self-Update Button:** Removed a duplicate `const updBtn` declaration in `dashboard-inject.js` that prevented the injected script block from executing and rendering the update trigger button.
+
+### v1.0.5 (2026-11-27)
+
+- **Automatic GeoIP City Map (No Registration Required):** Automatically downloads and refreshes `GeoLite2-City.mmdb` under `/usr/share/GeoIP/GeoLite2-City.mmdb` (every 30 days via `update-goaccess.sh` and during `./install`) from a public mirror without requiring a MaxMind account, passing `--geoip-database` to GoAccess so the Geo Location world map and city markers render automatically.
+
+### v1.0.6 (2026-11-27)
+
+- **Non-Interactive Install & Cleanup:** Updated `install` and `uninstall` for reliable, non-interactive execution including full cleanup of `/usr/local/bin/goaccess` and `/usr/share/GeoIP/GeoLite2-City.mmdb`.
+- **Layout & Sidebar Alignment:** Refined offset handling in `assets/dashboard-inject.js` across the custom domain sidebar, navigation icon bar, and main report container.
+- **Granular Update Logging:** Expanded `log_msg` output in `update-goaccess.sh` so domain runs, log counts, and status entries appear completely in `goaccess-update.log` and the Log Viewer.
+- **Automated Runner Upgrades:** Extended `goaccess-lang-runner.sh` to sync `/usr/local/bin/VERSION`, ensure `GeoLite2-City.mmdb` is present, restart `goaccess-lang.path`, and non-interactively build GoAccess `1.9.4` when needed.
 
 </details>
