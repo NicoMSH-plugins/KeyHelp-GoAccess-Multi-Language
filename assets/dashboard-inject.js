@@ -94,7 +94,7 @@
             clearInterval(timer);
             if (typeof updateGenRing === 'function') updateGenRing(100, mb, total, total);
             if (sub) sub.textContent = gaMsg('done');
-            var dir = window.location.pathname.replace(/[^/]*$/, '');
+            var _p = window.location.pathname; var dir = _p.slice(0, _p.lastIndexOf('/') + 1);
             setTimeout(function() {
               window.location.href = dir + targetFile + '?t=' + Date.now();
             }, 3000);
@@ -122,7 +122,7 @@
               clearInterval(timer);
               if (sub) sub.textContent = gaMsg('done');
               if (typeof updateGenRing === 'function') updateGenRing(100, mb, total, total);
-              var dir = window.location.pathname.replace(/[^/]*$/, '');
+              var _p = window.location.pathname; var dir = _p.slice(0, _p.lastIndexOf('/') + 1);
               setTimeout(function() {
                 window.location.href = dir + targetFile + '?t=' + Date.now();
               }, 3000);
@@ -249,7 +249,7 @@
     return String(v || '0.0.0')
       .replace(/^v/i, '')
       .split('.')
-      .map(n => parseInt(n, 10) || 0);
+      .map(n => Number.parseInt(n, 10) || 0);
   }
 
   function isNewer(remoteVer, localVer) {
@@ -347,11 +347,12 @@ function waitForRunnerFinish(sub, maxWaitMs) {
       .then(res => {
         if (res && res.ok) {
           try { localStorage.removeItem(cacheKey); } catch (_) {}
-          waitForRunnerFinish(sub, 180000).then(() => {
+          void waitForRunnerFinish(sub, 180000).then(() => {
             if (sub) sub.textContent = isGerman ? 'Fertig! Lade neu...' : 'Done! Reloading...';
             setTimeout(() => {
-              const currentFile = window.location.pathname.split('/').pop() || 'index.html';
-              const dir = window.location.pathname.replace(/[^/]*$/, '');
+              const p = window.location.pathname;
+              const currentFile = p.slice(p.lastIndexOf('/') + 1) || 'index.html';
+              const dir = p.slice(0, p.lastIndexOf('/') + 1);
               window.location.href = dir + currentFile + '?t=' + Date.now();
             }, 800);
           });
@@ -377,9 +378,22 @@ function waitForRunnerFinish(sub, maxWaitMs) {
       const btnText = isGerman
         ? `Update auf v${cleanRemote}`
         : `Update to v${cleanRemote}`;
-      box.innerHTML = `<div style="margin-bottom:4px;">v${currentVer} &rarr; v${cleanRemote}</div><button type="button" id="custom-update-btn" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:7px 10px;border-radius:8px;background:rgba(56,189,248,0.16);border:1px solid rgba(56,189,248,0.45);color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;">${btnText}</button>`;
-      const updBtn = document.getElementById('custom-update-btn');
+      box.textContent = '';
+
+        const verLabel = document.createElement('div');
+        verLabel.style.marginBottom = '4px';
+        verLabel.textContent = `v${currentVer} → v${cleanRemote}`;
+
+        const updBtn = document.createElement('button');
+        updBtn.type = 'button';
+        updBtn.id = 'custom-update-btn';
+        updBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:7px 10px;border-radius:8px;background:rgba(56,189,248,0.16);border:1px solid rgba(56,189,248,0.45);color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;';
+        updBtn.textContent = btnText;
+        const updBtn = document.getElementById('custom-update-btn');
       if (updBtn) updBtn.addEventListener('click', () => triggerSelfUpdate(updBtn, cleanRemote));
+
+        box.appendChild(verLabel);
+        box.appendChild(updBtn);
     } else {
       box.textContent = isGerman ? `v${currentVer} · Aktuell` : `v${currentVer} · Up to date`;
     }
