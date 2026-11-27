@@ -25,7 +25,7 @@ write_runner_progress() {
 UPD_FILE="${DB_BASE}/.update_request"
 if [ -f "$UPD_FILE" ]; then
   write_runner_progress 15 "Git Pull..." 0 1 true "0.0"
-  su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess pull --ff-only" >/dev/null 2>&1 || true
+  su -s /bin/sh keyhelp -c "HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess fetch origin main && HOME=/home/keyhelp git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess reset --hard origin/main" >/dev/null 2>&1 || true
   write_runner_progress 45 "Sync..." 0 1 true "0.0"
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/update-goaccess.sh /usr/local/bin/update-goaccess.sh 2>/dev/null || true
   cp -f /home/keyhelp/www/keyhelp/dashboard-layout/goaccess/goaccess-lang-runner.sh /usr/local/bin/goaccess-lang-runner.sh 2>/dev/null || true
