@@ -58,7 +58,7 @@ else
 fi
 
 # 2. Skripte unter /usr/local/bin/ entfernen
-for bin_path in /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh; do
+for bin_path in /usr/local/bin/update-goaccess.sh /usr/local/bin/goaccess-lang-runner.sh /usr/local/bin/VERSION; do
   if [ -e "$bin_path" ] || [ -L "$bin_path" ]; then
     if rm -f "$bin_path" 2>/dev/null; then
       step_ok "Skript ${bin_path} entfernt."
