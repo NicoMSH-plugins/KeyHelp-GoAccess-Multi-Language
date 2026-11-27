@@ -462,7 +462,7 @@ for CONF_FILE in "${CONF_FILES[@]}"; do
     <aside id=\"custom-domain-sidebar\">
       <div class=\"sidebar-header\">
         <div class=\"sidebar-title\">Domains (A–Z)</div>
-        <select id=\"custom-lang-select\" autocomplete=\"off\" data-default-lang=\"${TARGET_LANG}\" title=\"Sprache / Language\">$(printf "%s" "$lang_options_html" | sed "s/value=\\"${TARGET_LANG}\\"/value=\\"${TARGET_LANG}\\" selected/")</select>
+        <select id=\"custom-lang-select\" autocomplete=\"off\" data-default-lang=\"${TARGET_LANG}\" title=\"Sprache / Language\">$(printf "%s" "$lang_options_html" | awk -v lang="${TARGET_LANG}" '{ target = "value=\"" lang "\""; idx = index($0, target); if (idx > 0) { $0 = substr($0, 1, idx + length(target) - 1) " selected" substr($0, idx + length(target)); } print }')</select>
       </div>
       <input type=\"search\" id=\"custom-domain-search\" placeholder=\"Domain suchen...\" autocomplete=\"off\">
       <div id=\"custom-domain-list\">${nav_links}</div>
