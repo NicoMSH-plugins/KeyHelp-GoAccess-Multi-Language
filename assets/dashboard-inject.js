@@ -265,15 +265,72 @@
     return false;
   }
 
+function waitForRunnerFinish(sub, maxWaitMs) {
+    const limit = maxWaitMs || 180000;
+    const startedAt = Date.now();
+    let sawRunning = false;
+
+    return new Promise((resolve) => {
+      function check() {
+        fetch('/gen-lang.php?action=status', { cache: 'no-store', credentials: 'same-origin' })
+          .then(r => (r.ok ? r.json() : null))
+          .then(st => {
+            if (st && st.ok !== false) {
+              const pct = Number(st.pct || 0);
+              const mb = Number(st.mb || 0);
+              const done = Number(st.done || 0);
+              const total = Number(st.total || 1);
+              if (st.running === true || pct < 100) sawRunning = true;
+              if (typeof updateGenRing === 'function') {
+                updateGenRing(pct, mb, done, total || 1);
+              }
+              if (sub && st.domain) {
+                sub.textContent = String(st.domain);
+              }
+              const elapsed = Date.now() - startedAt;
+              if (st.running === false && pct >= 100 && (sawRunning || elapsed >= 1200)) {
+                if (typeof updateGenRing === 'function') updateGenRing(100, mb, total || 1, total || 1);
+                resolve();
+                return;
+              }
+            }
+            if ((Date.now() - startedAt) >= limit) {
+              resolve();
+              return;
+            }
+            setTimeout(check, 600);
+          })
+          .catch(() => {
+            if ((Date.now() - startedAt) >= limit) {
+              resolve();
+              return;
+            }
+            setTimeout(check, 1000);
+          });
+      }
+      setTimeout(check, 500);
+    });
+  }
+
   function triggerSelfUpdate(btn, targetVer) {
     if (!btn || btn.dataset.busy === '1') return;
     btn.dataset.busy = '1';
     btn.disabled = true;
     const origText = btn.textContent;
-    btn.textContent = isGerman ? 'Starte Update...' : 'Starting update...';
+    btn.textContent = isGerman ? 'Update läuft...' : 'Updating...';
 
     const overlay = document.getElementById('custom-gen-overlay');
-    if (overlay) overlay.classList.add('active');
+    const bar = document.getElementById('custom-gen-ring');
+    const sub = document.getElementById('custom-gen-status');
+    const oldBar = document.getElementById('custom-gen-bar');
+    if (oldBar) oldBar.style.display = 'none';
+    if (overlay) {
+      overlay.classList.add('active');
+      overlay.style.display = 'flex';
+    }
+    if (bar) bar.style.stroke = '#1f6feb';
+    if (typeof updateGenRing === 'function') updateGenRing(5, 0, 0, 1);
+    if (sub) sub.textContent = isGerman ? 'Starte Update auf v' + targetVer + '...' : 'Starting update to v' + targetVer + '...';
 
     fetch('/gen-lang.php?action=token', { credentials: 'same-origin' })
       .then(r => r.json())
@@ -290,13 +347,23 @@
       .then(res => {
         if (res && res.ok) {
           try { localStorage.removeItem(cacheKey); } catch (_) {}
-          window.location.reload();
+          waitForRunnerFinish(sub, 180000).then(() => {
+            if (sub) sub.textContent = isGerman ? 'Fertig! Lade neu...' : 'Done! Reloading...';
+            setTimeout(() => {
+              const currentFile = window.location.pathname.split('/').pop() || 'index.html';
+              const dir = window.location.pathname.replace(/[^/]*$/, '');
+              window.location.href = dir + currentFile + '?t=' + Date.now();
+            }, 800);
+          });
         } else {
           throw new Error((res && res.error) || 'Update failed');
         }
       })
       .catch(err => {
-        if (overlay) overlay.classList.remove('active');
+        if (overlay) {
+          overlay.classList.remove('active');
+          overlay.style.display = 'none';
+        }
         btn.disabled = false;
         btn.dataset.busy = '0';
         btn.textContent = origText;
