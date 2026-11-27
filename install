@@ -31,9 +31,13 @@ fi
 
 if id -u keyhelp >/dev/null 2>&1; then
   chown -R keyhelp:keyhelp "$SCRIPT_DIR" 2>/dev/null || true
-  chmod +x "$SCRIPT_DIR/install" "$SCRIPT_DIR/uninstall" "$SCRIPT_DIR/update-goaccess.sh" "$SCRIPT_DIR/goaccess-lang-runner.sh" 2>/dev/null || true
-  echo -e "${C_DIM}[i] Dateirechte im GoAccess-Verzeichnis auf keyhelp:keyhelp gesetzt.${C_RESET}"
+  chown root:root "$SCRIPT_DIR/install" "$SCRIPT_DIR/uninstall" 2>/dev/null || true
+  chmod 755 "$SCRIPT_DIR/install" "$SCRIPT_DIR/uninstall" 2>/dev/null || true
+  chmod +x "$SCRIPT_DIR/update-goaccess.sh" "$SCRIPT_DIR/goaccess-lang-runner.sh" 2>/dev/null || true
+  echo -e "${C_DIM}[i] Rechte gesetzt: install/uninstall gehoeren root:root, der Rest keyhelp:keyhelp.${C_RESET}"
 fi
+sleep 3
+clear
 
 echo ""
 echo -e "${C_BOLD}Select installer & report language / Sprache waehlen:${C_RESET}"
