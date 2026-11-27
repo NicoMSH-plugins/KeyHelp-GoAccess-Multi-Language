@@ -8,6 +8,20 @@ PROG_FILE="${DB_BASE}/.gen_progress"
 exec 9>"$LOCK_FILE"
 flock -w 120 9 || exit 1
 
+write_runner_progress() {
+  local p_pct="$1"
+  local p_dom="$2"
+  local p_done="$3"
+  local p_total="$4"
+  local p_running="$5"
+  local p_mb="${6:-0.0}"
+  printf '{"pct":%s,"mb":%s,"domain":"%s","done":%s,"total":%s,"running":%s}\n'     "$p_pct" "$p_mb" "$p_dom" "$p_done" "$p_total" "$p_running" > "$PROG_FILE"
+  chmod 0664 "$PROG_FILE" 2>/dev/null || true
+  mkdir -p "${DB_BASE}/nicoweb" 2>/dev/null || true
+  cp -f "$PROG_FILE" "${DB_BASE}/nicoweb/.gen_progress" 2>/dev/null || true
+  chmod 0664 "${DB_BASE}/nicoweb/.gen_progress" 2>/dev/null || true
+}
+
 UPD_FILE="${DB_BASE}/.update_request"
 if [ -f "$UPD_FILE" ]; then
   write_runner_progress 15 "Git Pull..." 0 1 true "0.0"
@@ -58,20 +72,6 @@ get_active_dom_count() {
     [ "$cnt" -gt 0 ] && { echo "$cnt"; return 0; }
   done
   echo 10
-}
-
-write_runner_progress() {
-  local p_pct="$1"
-  local p_dom="$2"
-  local p_done="$3"
-  local p_total="$4"
-  local p_running="$5"
-  local p_mb="${6:-0.0}"
-  printf '{"pct":%s,"mb":%s,"domain":"%s","done":%s,"total":%s,"running":%s}\n'     "$p_pct" "$p_mb" "$p_dom" "$p_done" "$p_total" "$p_running" > "$PROG_FILE"
-  chmod 0664 "$PROG_FILE" 2>/dev/null || true
-  mkdir -p "${DB_BASE}/nicoweb" 2>/dev/null || true
-  cp -f "$PROG_FILE" "${DB_BASE}/nicoweb/.gen_progress" 2>/dev/null || true
-  chmod 0664 "${DB_BASE}/nicoweb/.gen_progress" 2>/dev/null || true
 }
 
 if [ -n "$LANG_CODE" ]; then
