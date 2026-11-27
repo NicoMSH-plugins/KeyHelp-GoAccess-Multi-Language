@@ -146,12 +146,7 @@ ls -la /home/users/<KH_USER>/www/<STATS_DOMAIN>/*.html
 
 ### Updating
 
-Pull the latest changes as `keyhelp` and re-run `./install` as `root` to update `/usr/local/bin/` scripts, PHP endpoints, and `systemd` units (your local `*.conf` files are git-ignored and remain untouched):
-
-```bash
-su -s /bin/sh keyhelp -c "git -C /home/keyhelp/www/keyhelp/dashboard-layout/goaccess pull"
-cd /home/keyhelp/www/keyhelp/dashboard-layout/goaccess && ./install
-```
+Updates can be triggered directly from the **Update** button in the bottom-left sidebar of your statistics dashboard whenever a new release is available. The background runner automatically pulls the latest changes from `main`, updates scripts, PHP endpoints, `systemd` units, GeoIP data, and GoAccess `1.9.4` if needed, rebuilds all reports, and logs every step in the Log Viewer (local `*.conf` files remain untouched).
 
 ### Uninstalling
 
